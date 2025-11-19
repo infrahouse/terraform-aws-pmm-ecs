@@ -1,69 +1,79 @@
-PYTHON := python3
-TERRAFORM := terraform
-PYTEST := pytest
+.DEFAULT_GOAL := help
 
-.PHONY: help
+define PRINT_HELP_PYSCRIPT
+import re, sys
+
+for line in sys.stdin:
+    match = re.match(r'^([a-zA-Z_-]+):.*?## (.*)$$', line)
+    if match:
+        target, help = match.groups()
+        print("%-40s %s" % (target, help))
+endef
+export PRINT_HELP_PYSCRIPT
+
+TEST_REGION ?= us-west-2
+TEST_ROLE ?= arn:aws:iam::303467602807:role/pmm-ecs-tester
+TEST_SELECTOR ?= test_module and aws-6
+
 help:
-	@echo "Available targets:"
-	@echo "  make bootstrap     - Install dependencies for testing"
-	@echo "  make test          - Run all tests"
-	@echo "  make test-basic    - Test basic PMM deployment"
-	@echo "  make test-vpc      - Test VPC/RDS integration"
-	@echo "  make test-backup   - Test backup functionality"
-	@echo "  make lint          - Lint Terraform code"
-	@echo "  make format        - Format Terraform code"
-	@echo "  make validate      - Validate Terraform configuration"
-	@echo "  make docs          - Generate documentation"
-	@echo "  make clean         - Clean test artifacts"
-
-.PHONY: bootstrap
-bootstrap:
-	pip3 install -r tests/requirements.txt
+	@python -c "$$PRINT_HELP_PYSCRIPT" < Makefile
 
 .PHONY: lint
-lint:
-	$(TERRAFORM) fmt -check -recursive
-	@if command -v tflint > /dev/null; then \
-		tflint; \
-	else \
-		echo "tflint not found, skipping..."; \
-	fi
-
-.PHONY: format
-format:
-	$(TERRAFORM) fmt -recursive
-
-.PHONY: validate
-validate:
-	$(TERRAFORM) init -backend=false
-	$(TERRAFORM) validate
+lint:  ## Run code style checks
+	terraform fmt --check -recursive
 
 .PHONY: test
-test: test-basic test-vpc test-backup
+test:  ## Run tests on the module
+	pytest -xvvs tests/
 
-.PHONY: test-basic
-test-basic:
-	$(PYTEST) tests/test_basic.py -v
+.PHONY: test-keep
+test-keep:  ## Run a test and keep resources
+	pytest -xvvs \
+		--aws-region=${TEST_REGION} \
+		--test-role-arn=${TEST_ROLE} \
+		--keep-after \
+		-k "${TEST_SELECTOR}" \
+		tests/test_basic.py \
+		2>&1 | tee pytest-`date +%Y%m%d-%H%M%S`-output.log
 
-.PHONY: test-vpc
-test-vpc:
-	$(PYTEST) tests/test_monitoring.py -v
+.PHONY: test-clean
+test-clean:  ## Run a test and destroy resources
+	pytest -xvvs \
+		--aws-region=${TEST_REGION} \
+		--test-role-arn=${TEST_ROLE} \
+		-k "${TEST_SELECTOR}" \
+		tests/test_basic.py \
+		2>&1 | tee pytest-`date +%Y%m%d-%H%M%S`-output.log
 
-.PHONY: test-backup
-test-backup:
-	$(PYTEST) tests/test_persistence.py -v
+.PHONY: bootstrap
+bootstrap: ## bootstrap the development environment
+	pip install -U "pip ~= 25.2"
+	pip install -U "setuptools ~= 80.9"
+	pip install -r tests/requirements.txt
+
+.PHONY: clean
+clean: ## clean the repo from cruft
+	rm -rf .pytest_cache
+	find . -name '.terraform' -exec rm -fr {} +
+	rm -f pytest-*-output.log
+
+.PHONY: fmt
+fmt: format
+
+.PHONY: format
+format:  ## Use terraform fmt to format all files in the repo
+	@echo "Formatting terraform files"
+	terraform fmt -recursive
+
+.PHONY: validate
+validate:  ## Validate Terraform configuration
+	terraform init -backend=false
+	terraform validate
 
 .PHONY: docs
-docs:
+docs:  ## Generate documentation
 	@if command -v terraform-docs > /dev/null; then \
 		terraform-docs markdown table --output-file README.md --output-mode inject .; \
 	else \
 		echo "terraform-docs not found. Install from https://terraform-docs.io/"; \
 	fi
-
-.PHONY: clean
-clean:
-	find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.tfstate*" -exec rm -f {} + 2>/dev/null || true
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true

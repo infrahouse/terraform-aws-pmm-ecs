@@ -13,5 +13,9 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    cloudinit = {
+      source  = "hashicorp/cloudinit"
+      version = "~> 2.3"
+    }
   }
 }

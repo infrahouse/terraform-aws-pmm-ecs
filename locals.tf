@@ -5,17 +5,12 @@ locals {
   service_name = var.service_name
   docker_image = "percona/pmm-server:${var.pmm_version}"
 
+  ubuntu_codename      = "noble"
+  ami_name_pattern_pro = "ubuntu-pro-server/images/hvm-ssd-gp3/ubuntu-${local.ubuntu_codename}-*"
+
   efs_creation_token = "${local.service_name}-data"
 
   cloudwatch_log_group = "/aws/ecs/${local.service_name}"
-
-  # Extract ARN suffixes for CloudWatch alarms
-  # ARN format: arn:aws:elasticloadbalancing:region:account:loadbalancer/app/name/id
-  # Suffix format: app/name/id
-  load_balancer_arn_suffix = try(split("loadbalancer/", module.pmm_ecs.load_balancer_arn)[1], "")
-  # Get target group ARN from listener's default action
-  target_group_arn        = try(data.aws_lb_listener.pmm.default_action[0].target_group_arn, "")
-  target_group_arn_suffix = try(split("targetgroup/", local.target_group_arn)[1], "")
 
   # PMM environment variables
   pmm_environment_variables = [
@@ -23,10 +18,6 @@ locals {
       name  = "DISABLE_TELEMETRY"
       value = tostring(var.disable_telemetry)
     },
-    {
-      name  = "ENABLE_DBAAS"
-      value = tostring(var.enable_dbaas)
-    }
   ]
 
   # PMM secrets (admin password from Secrets Manager)

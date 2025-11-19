@@ -52,17 +52,6 @@ variable "disable_telemetry" {
   default     = true
 }
 
-variable "enable_dbaas" {
-  description = <<-EOF
-    Enable PMM DBaaS (Database as a Service) features.
-    DBaaS allows provisioning Percona database clusters via PMM's web interface using Kubernetes.
-    This feature is deprecated by Percona in favor of Percona Everest and requires a Kubernetes cluster.
-    Most users only need PMM for monitoring existing databases, not provisioning new ones.
-  EOF
-  type        = bool
-  default     = false
-}
-
 # Compute resources
 variable "instance_type" {
   description = "EC2 instance type for ECS"
@@ -78,7 +67,7 @@ variable "instance_type" {
 variable "container_cpu" {
   description = "CPU units for PMM container"
   type        = number
-  default     = 2048
+  default     = 512
 }
 
 variable "container_memory" {
@@ -144,16 +133,6 @@ variable "cloudwatch_log_retention_days" {
   default     = 365
 }
 
-variable "alarm_emails" {
-  description = "Email addresses for CloudWatch alarms"
-  type        = list(string)
-
-  validation {
-    condition     = length(var.alarm_emails) > 0
-    error_message = "At least one email address must be provided for CloudWatch alarms"
-  }
-}
-
 # Health check configuration
 variable "healthcheck_interval" {
   description = "Health check interval in seconds"
@@ -174,10 +153,10 @@ variable "ssh_key_name" {
   default     = null
 }
 
-variable "admin_cidr_blocks" {
-  description = "CIDR blocks for admin SSH access"
-  type        = list(string)
-  default     = []
+variable "admin_cidr_block" {
+  description = "CIDR block for admin SSH access"
+  type        = string
+  default     = null
 }
 
 # Security

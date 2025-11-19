@@ -1,0 +1,22 @@
+[Unit]
+Description=PMM Server Container
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=-/usr/bin/docker stop pmm-server
+ExecStartPre=-/usr/bin/docker rm pmm-server
+ExecStart=/usr/bin/docker run --rm \
+  --name pmm-server \
+  -p 0.0.0.0:443:8443 \
+  -p 0.0.0.0:80:8080 \
+  -v /mnt/pmm-data:/srv \
+  -e DISABLE_TELEMETRY=${disable_telemetry} \
+  ${docker_image}
+ExecStop=/usr/bin/docker stop pmm-server
+
+[Install]
+WantedBy=multi-user.target

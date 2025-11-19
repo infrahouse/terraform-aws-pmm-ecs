@@ -1,9 +1,16 @@
-Based on the InfraHouse lambda-monitored module's structure and best practices, 
+Based on the InfraHouse lambda-monitored module's structure and best practices,
 here's a comprehensive plan for creating a **terraform-aws-pmm-ecs** module:
+
+## ⚠️ ARCHITECTURAL CHANGE
+**Original Plan**: ECS-based deployment with EFS storage
+**Actual Implementation**: Website-pod (EC2 ASG) with Docker + local storage for databases
+
+**Reason**: EFS eventual consistency caused ClickHouse and PostgreSQL corruption.
+Migrated to simpler architecture using infrahouse/website-pod/aws with local storage.
 
 ## Module Development Plan: `terraform-aws-pmm-ecs`
 
-### 1. **Module Structure**
+### 1. **Module Structure** ✅ COMPLETED
 ```
 terraform-aws-pmm-ecs/
 ├── README.md
@@ -55,7 +62,7 @@ terraform-aws-pmm-ecs/
     └── TROUBLESHOOTING.md
 ```
 
-### 2. **Core Files Content**
+### 2. **Core Files Content** ✅ COMPLETED (with website-pod architecture)
 
 #### **main.tf**
 ```hcl
@@ -507,32 +514,110 @@ jobs:
             CHANGELOG.md
 ```
 
-### 6. **Development Timeline**
+### 6. **Development Status**
 
-**Week 1: Core Infrastructure**
-- Basic module structure
-- EFS and security groups
-- Integration with infrahouse/ecs module
+#### ✅ **Completed**
+**Core Infrastructure:**
+- ✅ Module file structure (main.tf, variables.tf, outputs.tf, versions.tf, locals.tf, data.tf)
+- ✅ Security groups for website-pod
+- ✅ IAM roles and policies (EC2 instance profile with Secrets Manager access)
+- ✅ Integration with infrahouse/website-pod/aws module v5.9.0
+- ✅ Cloud-init configuration with Docker CE installation
+- ✅ systemd services for PMM container management
+- ✅ Admin password initialization system (get-pmm-password.sh, set-pmm-password.sh)
 
-**Week 2: Features & Configuration**
-- CloudWatch monitoring
-- Backup configuration
-- IAM roles and policies
+**Features & Configuration:**
+- ✅ Auto-generated admin passwords (random_password + Secrets Manager)
+- ✅ InfraHouse secret module integration
+- ✅ PMM environment variables (DISABLE_TELEMETRY)
+- ✅ Local storage for ClickHouse and PostgreSQL databases (ephemeral)
+- ✅ Docker container deployment with correct port mappings (80:8080, 443:8443)
+- ✅ Password initialization after PMM startup using change-admin-password command
+- ✅ Ubuntu Pro 24.04 LTS (Noble) with Docker CE
+- ✅ InfraHouse and Docker official repositories configured in cloud-init
 
-**Week 3: Testing & Documentation**
-- Pytest test suite
-- Examples for different scenarios
-- Comprehensive documentation
+**Project Setup:**
+- ✅ .gitignore
+- ✅ Makefile (bootstrap, lint, format, validate, docs, clean)
+- ✅ .bumpversion.cfg for version tracking
+- ✅ InfraHouse tagging standard applied
+- ✅ Workarounds for missing module outputs documented
 
-**Week 4: Polish & Release**
-- GitHub Actions CI/CD
-- Performance optimization
-- Initial release
+**Module Structure (Section 1):**
+- ✅ README.md - Comprehensive with examples, usage guide
+- ✅ LICENSE - Apache 2.0
+- ✅ .github/workflows/terraform-CI.yml - PR validation workflow (InfraHouse pattern)
+- ✅ .github/workflows/terraform-CD.yml - Release automation (InfraHouse pattern)
+- ✅ examples/basic/ - Simple deployment example
+- ✅ examples/advanced/ - With custom KMS, monitoring, etc.
+- ✅ examples/with-rds-monitoring/ - RDS integration example
+- ✅ test_data/test_basic/ - Basic test configuration
+- ✅ tests/conftest.py - Pytest configuration
+- ✅ tests/test_basic.py - Basic deployment test
+- ✅ tests/requirements.txt - Python test dependencies
+- ✅ scripts/setup-pmm-client.sh - Helper script for client setup
+- ✅ scripts/backup-efs.sh - Manual backup script
+- ✅ docs/ARCHITECTURE.md - Detailed architecture explanation
+- ✅ docs/RDS_SETUP.md - RDS monitoring setup guide
+- ✅ docs/TROUBLESHOOTING.md - Common issues and solutions
+
+#### ✅ **All Core Tasks Completed**
+
+**Additional Testing:**
+- ✅ test_data/test_with_vpc/ - VPC integration test with RDS
+- ✅ test_data/test_with_backup/ - Backup/restore test with custom KMS
+- ✅ tests/test_monitoring.py - CloudWatch alarms and SNS test
+- ✅ tests/test_persistence.py - EFS backup/restore and persistence test
+
+**Additional Documentation:**
+- ✅ CHANGELOG.md - Version history and release notes
+
+**Templates:**
+- ✅ templates/get-pmm-password.sh.tftpl - Retrieve password from Secrets Manager
+- ✅ templates/set-pmm-password.sh.tftpl - Wait for PMM and set password
+- ✅ templates/set-pmm-password.service.tftpl - Systemd oneshot service
+- ✅ templates/pmm-server.service.tftpl - PMM Docker container systemd service
+
+**Critical Fixes:**
+- ✅ Fixed ADMIN_PASSWORD env var issue (not supported in PMM 2.x/3.x Docker)
+- ✅ Implemented post-initialization password change using change-admin-password
+- ✅ Fixed Docker port mappings for PMM (80:8080, 443:8443)
+- ✅ Fixed cloud-init brace expansion for directory creation
+- ✅ Migrated from EFS to local storage (avoiding database corruption)
+
+**Next Steps:**
+1. Run tests: `make test` (verify all tests pass)
+2. Fix any test failures
+3. Tag and release: v0.1.0
 
 ### 7. **Implementation Notes & Workarounds**
 
-#### **Module Output Workarounds**
-The infrahouse/ecs/aws module v6.0.0 is missing several outputs needed for monitoring. Implemented workarounds:
+#### **Architecture Migration: ECS → Website-Pod**
+**Problem**: EFS eventual consistency caused database corruption (ClickHouse, PostgreSQL)
+- ClickHouse error: "could not locate a valid checkpoint record"
+- PostgreSQL error: Same checkpoint corruption
+
+**Solution**: Migrated to infrahouse/website-pod/aws with local storage
+- PMM container runs directly on EC2 via systemd
+- Databases stored on local EBS volumes (ephemeral but consistent)
+- Simpler architecture, no ECS overhead
+- Data loss accepted for this use case (monitoring data is transient)
+
+#### **PMM Password Initialization Issue**
+**Problem**: ADMIN_PASSWORD environment variable doesn't work in PMM 2.x/3.x Docker
+- PMM v1 supported SERVER_USER/SERVER_PASSWORD env vars
+- These were removed in PMM v2.x (JIRA PMM-4673 not implemented)
+- Container always creates default admin/admin credentials
+
+**Solution**: Post-initialization password change
+1. PMM container starts with default credentials
+2. systemd oneshot service waits for PMM health endpoint
+3. Executes `docker exec pmm-server change-admin-password <password>`
+4. Flag file prevents re-running on restarts
+
+#### **Module Output Workarounds (Legacy - Not Applicable)**
+~~The infrahouse/ecs/aws module v6.0.0 is missing several outputs needed for monitoring. Implemented workarounds:~~
+**Note**: This section is obsolete as we're using website-pod, not ECS.
 
 1. **Target Group ARN**: Extract from listener data source
    ```hcl

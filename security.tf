@@ -1,60 +1,5 @@
-# Security group for EFS mount targets
-resource "aws_security_group" "efs" {
-  name_prefix = "${local.service_name}-efs-"
-  description = "Security group for PMM EFS mount targets"
-  vpc_id      = data.aws_vpc.selected.id
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${local.service_name}-efs"
-    }
-  )
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Allow NFS traffic from ECS tasks to EFS
-resource "aws_vpc_security_group_ingress_rule" "efs_from_ecs" {
-  security_group_id = aws_security_group.efs.id
-  description       = "Allow NFS from ECS tasks"
-
-  referenced_security_group_id = module.pmm_ecs.backend_security_group
-  from_port                    = 2049
-  to_port                      = 2049
-  ip_protocol                  = "tcp"
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${local.service_name}-efs-from-ecs"
-    }
-  )
-}
-
-# Allow PMM to access RDS instances for monitoring
-resource "aws_vpc_security_group_ingress_rule" "rds_from_pmm" {
-  for_each          = toset(var.rds_security_group_ids)
-  security_group_id = each.key
-  description       = "Allow PMM monitoring access"
-
-  referenced_security_group_id = module.pmm_ecs.backend_security_group
-  from_port                    = 5432 # PostgreSQL port
-  to_port                      = 5432
-  ip_protocol                  = "tcp"
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${local.service_name}-to-rds"
-    }
-  )
-}
-
-# IAM policy document for ECS task execution role
-data "aws_iam_policy_document" "pmm_execution" {
+# IAM policy document for EC2 instance
+data "aws_iam_policy_document" "pmm_instance" {
   statement {
     effect = "Allow"
     actions = [
@@ -78,44 +23,26 @@ data "aws_iam_policy_document" "pmm_execution" {
   }
 }
 
-# IAM policy for ECS task execution role
-resource "aws_iam_policy" "pmm_execution" {
-  name_prefix = "${local.service_name}-execution-"
-  description = "IAM policy for PMM ECS task execution"
+# IAM policy for EC2 instance
+resource "aws_iam_policy" "pmm_instance" {
+  name_prefix = "${local.service_name}-instance-"
+  description = "IAM policy for PMM EC2 instance"
 
-  policy = data.aws_iam_policy_document.pmm_execution.json
+  policy = data.aws_iam_policy_document.pmm_instance.json
 
   tags = local.common_tags
 }
 
-# IAM assume role policy for ECS task
-data "aws_iam_policy_document" "pmm_task_assume_role" {
-  statement {
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
-    }
-
-    actions = ["sts:AssumeRole"]
-  }
-}
-
-# IAM role for ECS task (runtime permissions)
-resource "aws_iam_role" "pmm_task" {
-  name_prefix = "${local.service_name}-task-"
-  description = "IAM role for PMM ECS task"
-
-  assume_role_policy = data.aws_iam_policy_document.pmm_task_assume_role.json
-
-  tags = local.common_tags
+# Attach instance policy to the role created by the website-pod module
+resource "aws_iam_role_policy_attachment" "pmm_instance" {
+  role       = module.pmm_pod.instance_role_name
+  policy_arn = aws_iam_policy.pmm_instance.arn
 }
 
 # Generate random admin password
 resource "random_password" "admin" {
   length  = 32
-  special = true
+  special = false
 }
 
 # Admin password secret using InfraHouse secret module
@@ -130,7 +57,9 @@ module "admin_password_secret" {
 
   readers = concat(
     var.secret_readers,
-    [aws_iam_role.pmm_task.arn]
+    [
+      module.pmm_pod.instance_role_arn,
+    ]
   )
 
   tags = local.common_tags

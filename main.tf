@@ -1,7 +1,7 @@
-# ECS Cluster Module for PMM Server
-module "pmm_ecs" {
-  source  = "infrahouse/ecs/aws"
-  version = "6.0.0"
+# Website Pod Module for PMM Server
+module "pmm_pod" {
+  source  = "infrahouse/website-pod/aws"
+  version = "5.9.0"
 
   providers = {
     aws     = aws
@@ -9,67 +9,36 @@ module "pmm_ecs" {
   }
 
   # Core configuration
-  service_name   = local.service_name
-  docker_image   = local.docker_image
-  container_port = 443
+  service_name = local.service_name
 
   # Resources
-  container_cpu     = var.container_cpu
-  container_memory  = var.container_memory
-  asg_instance_type = var.instance_type
+  instance_type = var.instance_type
 
   # Networking
-  load_balancer_subnets = var.public_subnet_ids
-  asg_subnets           = var.private_subnet_ids
-  internet_gateway_id   = data.aws_internet_gateway.selected.id
+  subnets         = var.public_subnet_ids
+  backend_subnets = var.private_subnet_ids
 
   # DNS
-  zone_id   = var.zone_id
-  dns_names = var.dns_names
+  zone_id       = var.zone_id
+  dns_a_records = var.dns_names
 
   # Health checks
-  healthcheck_path                  = "/v1/readyz"
-  healthcheck_response_code_matcher = "200"
-  healthcheck_interval              = var.healthcheck_interval
-  healthcheck_timeout               = var.healthcheck_timeout
+  alb_healthcheck_path = "/v1/readyz"
+  target_group_port    = 80
 
   # Auto-scaling (PMM should run as singleton for data consistency)
-  asg_min_size       = 1
-  asg_max_size       = 1
-  task_min_count     = 1
-  task_desired_count = 1
-  task_max_count     = 1
-
-  # Persistent storage
-  task_efs_volumes = {
-    "pmm-data" : {
-      file_system_id : aws_efs_file_system.pmm_data.id
-      container_path : "/srv"
-    }
-  }
-
-  # Environment variables
-  task_environment_variables = local.pmm_environment_variables
-
-  # Secrets
-  task_secrets = local.pmm_secrets
-
-  # Logging
-  enable_cloudwatch_logs         = true
-  cloudwatch_log_group           = local.cloudwatch_log_group
-  cloudwatch_log_group_retention = var.cloudwatch_log_retention_days
+  asg_min_size = 1
+  asg_max_size = 1
 
   # SSH access
-  ssh_key_name   = var.ssh_key_name
-  ssh_cidr_block = var.admin_cidr_blocks
+  key_pair_name = var.ssh_key_name
 
-  # IAM
-  execution_task_role_policy_arn = aws_iam_policy.pmm_execution.arn
-  task_role_arn                  = aws_iam_role.pmm_task.arn
+  # User data to run PMM container
+  userdata = data.cloudinit_config.pmm.rendered
 
-  tags = local.common_tags
+  ami                 = data.aws_ami.ubuntu_pro.id
+  internet_gateway_id = data.aws_internet_gateway.selected.id
 
-  depends_on = [
-    aws_efs_mount_target.pmm_data
-  ]
+  tags                      = local.common_tags
+  wait_for_capacity_timeout = "5m"
 }

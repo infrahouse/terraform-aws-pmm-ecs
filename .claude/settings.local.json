@@ -15,7 +15,9 @@
       "Bash(make lint:*)",
       "Bash(rm:*)",
       "WebFetch(domain:docs.percona.com)",
-      "WebFetch(domain:aws.amazon.com)"
+      "WebFetch(domain:aws.amazon.com)",
+      "WebFetch(domain:www.percona.com)",
+      "WebFetch(domain:forums.percona.com)"
     ],
     "deny": [],
     "ask": []
