@@ -5,6 +5,7 @@
 * The module should only require providers it actually uses to create direct resources. Child modules should take care 
   of their required providers.
 * When including other Terraform modules, always pin them to exact version.
+* For IAM policies, use data source policy document, don't use a generated json.
 
 ## Tagging
 * use lowercase tags except Name

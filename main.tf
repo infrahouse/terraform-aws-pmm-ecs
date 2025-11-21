@@ -40,5 +40,6 @@ module "pmm_pod" {
   internet_gateway_id = data.aws_internet_gateway.selected.id
 
   tags                      = local.common_tags
-  wait_for_capacity_timeout = "5m"
+
+  alb_access_log_force_destroy = true
 }

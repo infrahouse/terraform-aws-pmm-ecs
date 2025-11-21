@@ -39,6 +39,19 @@ resource "aws_iam_role_policy_attachment" "pmm_instance" {
   policy_arn = aws_iam_policy.pmm_instance.arn
 }
 
+# Allow PMM to access RDS instances on port 5432 (PostgreSQL)
+resource "aws_security_group_rule" "pmm_to_rds_postgres" {
+  for_each = toset(var.rds_security_group_ids)
+
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = module.pmm_pod.backend_security_group.backend.id
+  security_group_id        = each.value
+  description              = "Allow PMM server to connect to PostgreSQL"
+}
+
 # Generate random admin password
 resource "random_password" "admin" {
   length  = 32

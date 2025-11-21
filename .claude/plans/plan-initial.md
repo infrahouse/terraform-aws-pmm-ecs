@@ -341,7 +341,51 @@ variable "tags" {
 # - Use HEREDOC for long descriptions
 ```
 
-### 3. **Testing Strategy**
+### 3. **Testing Strategy** ✅ COMPLETED
+
+✅ **Test Implementation Completed:**
+* ✅ Test creates a PMM instance with HTTPS and SSL certificate (via website-pod ALB + ACM)
+* ✅ Test creates a PostgreSQL RDS instance with Database Insights - Advanced mode
+* ✅ README comprehensively explains how to add PostgreSQL instance to PMM
+* ✅ Human testing successfully completed - PostgreSQL instance added and monitoring verified
+
+**Test Configuration (`test_data/test_basic/`):**
+- ✅ `postgres.tf` - PostgreSQL RDS instance with Database Insights - Advanced mode (465 days retention)
+- ✅ `main.tf` - PMM module configuration with RDS security group integration
+- ✅ `outputs.tf` - PostgreSQL connection details (endpoint, port, database, credentials)
+- ✅ Security group rules automatically created for PMM → PostgreSQL connectivity (port 5432)
+
+**Testing Completed:**
+- ✅ PMM deployment successful with HTTPS
+- ✅ PostgreSQL RDS instance created with:
+  - ✅ Performance Insights enabled (Advanced mode - 15 months retention)
+  - ✅ Enhanced Monitoring (60-second granularity)
+  - ✅ CloudWatch Logs export (postgresql, upgrade)
+  - ✅ Database Insights - Advanced mode features
+- ✅ Security group connectivity verified (PMM can reach RDS on port 5432)
+- ✅ pg_stat_statements extension enabled on both `testdb` and `postgres` databases
+- ✅ PostgreSQL successfully added to PMM monitoring
+- ✅ All PMM agents running (postgres_exporter + QAN pgstatements)
+- ✅ Metrics flowing to dashboards (Connections, QPS, Locks, Tuples, Query Analytics)
+
+**Documentation Completed:**
+- ✅ README.md - Comprehensive "Adding PostgreSQL to PMM" section with:
+  - ✅ Prerequisites (security groups, pg_stat_statements, Database Insights)
+  - ✅ Step-by-step connection instructions
+  - ✅ Database Insights configuration guide
+  - ✅ Monitoring permissions setup (pg_monitor role)
+  - ✅ Troubleshooting section with common errors:
+    - ✅ Connection timeout (security group configuration)
+    - ✅ Authentication error (database name + SSL/TLS requirements)
+    - ✅ Failed monitoring (pg_stat_statements extension)
+  - ✅ Verification steps
+
+**Issues Encountered & Resolved:**
+1. ✅ Connection timeout → Added security group rules in `security.tf`
+2. ✅ "no encryption" error → Documented TLS requirement in README
+3. ✅ Wrong database name → Documented database field requirement
+4. ✅ QAN agent "Waiting" → Enabled pg_stat_statements on postgres database
+5. ✅ IAM policy using jsonencode → Refactored to use data source policy document
 
 #### **Makefile**
 ```makefile
@@ -353,46 +397,12 @@ PYTEST := pytest
 help:
 	@echo "Available targets:"
 	@echo "  make test          - Run all tests"
-	@echo "  make test-basic    - Test basic PMM deployment"
-	@echo "  make test-vpc      - Test VPC/RDS integration"
-	@echo "  make test-backup   - Test backup functionality"
+	@echo "  make test-keep     - Run a selected test and keep resources"
+	@echo "  make test-clean    - Run a selected test and destroy resources"
 	@echo "  make lint          - Lint Terraform code"
 	@echo "  make format        - Format Terraform code"
 	@echo "  make clean         - Clean test artifacts"
 
-.PHONY: bootstrap
-bootstrap:
-	pip3 install -r tests/requirements.txt
-
-.PHONY: lint
-lint:
-	terraform fmt -check -recursive
-	tflint
-
-.PHONY: format
-format:
-	terraform fmt -recursive
-
-.PHONY: test
-test: test-basic test-vpc test-backup
-
-.PHONY: test-basic
-test-basic:
-	$(PYTEST) tests/test_basic.py -v
-
-.PHONY: test-vpc
-test-vpc:
-	$(PYTEST) tests/test_monitoring.py -v
-
-.PHONY: test-backup
-test-backup:
-	$(PYTEST) tests/test_persistence.py -v
-
-.PHONY: clean
-clean:
-	find . -type d -name ".terraform" -exec rm -rf {} +
-	find . -type f -name "*.tfstate*" -exec rm -f {} +
-	find . -type d -name "__pycache__" -exec rm -rf {} +
 ```
 
 #### **tests/test_basic.py**
