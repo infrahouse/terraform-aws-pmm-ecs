@@ -47,7 +47,7 @@ resource "aws_security_group_rule" "pmm_to_rds_postgres" {
   from_port                = 5432
   to_port                  = 5432
   protocol                 = "tcp"
-  source_security_group_id = module.pmm_pod.backend_security_group_id
+  source_security_group_id = module.pmm_pod.backend_security_group.backend.id
   security_group_id        = var.rds_security_group_ids[count.index]
   description              = "Allow PMM server to connect to PostgreSQL"
 }
