@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir:*)",
+      "WebSearch",
+      "WebFetch(domain:registry.terraform.io)",
+      "Bash(chmod:*)",
+      "Bash(terraform fmt:*)",
+      "Bash(yamllint:*)",
+      "Bash(terraform init:*)",
+      "Bash(terraform validate:*)",
+      "Bash(terraform-docs:*)",
+      "Bash(make lint:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:docs.percona.com)",
+      "WebFetch(domain:aws.amazon.com)",
+      "WebFetch(domain:www.percona.com)",
+      "WebFetch(domain:forums.percona.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
