@@ -39,7 +39,7 @@ module "pmm_pod" {
   ami                 = data.aws_ami.ubuntu_pro.id
   internet_gateway_id = data.aws_internet_gateway.selected.id
 
-  tags                      = local.common_tags
+  tags = local.common_tags
 
   alb_access_log_force_destroy = true
 }
