@@ -1,6 +1,6 @@
 locals {
   module         = "infrahouse/pmm-ecs/aws"
-  module_version = "0.1.0"
+  module_version = "0.2.0"
 
   service_name = var.service_name
   docker_image = "percona/pmm-server:${var.pmm_version}"
