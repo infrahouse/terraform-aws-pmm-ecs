@@ -320,16 +320,16 @@ For production deployments requiring data persistence across instance replacemen
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.21.0 |
-| <a name="provider_cloudinit"></a> [cloudinit](#provider\_cloudinit) | 2.3.7 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 5.11, < 7.0 |
+| <a name="provider_cloudinit"></a> [cloudinit](#provider\_cloudinit) | ~> 2.3 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.6 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_admin_password_secret"></a> [admin\_password\_secret](#module\_admin\_password\_secret) | infrahouse/secret/aws | 1.1.1 |
-| <a name="module_pmm_pod"></a> [pmm\_pod](#module\_pmm\_pod) | infrahouse/website-pod/aws | 5.9.0 |
+| <a name="module_pmm_pod"></a> [pmm\_pod](#module\_pmm\_pod) | infrahouse/website-pod/aws | 5.10.0 |
 
 ## Resources
 
@@ -354,6 +354,7 @@ For production deployments requiring data persistence across instance replacemen
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_admin_cidr_block"></a> [admin\_cidr\_block](#input\_admin\_cidr\_block) | CIDR block for admin SSH access | `string` | `null` | no |
+| <a name="input_allowed_cidr"></a> [allowed\_cidr](#input\_allowed\_cidr) | List of CIDR blocks allowed to access the PMM ALB | `list(string)` | <pre>[<br/>  "0.0.0.0/0"<br/>]</pre> | no |
 | <a name="input_backup_retention_days"></a> [backup\_retention\_days](#input\_backup\_retention\_days) | Days to retain EFS backups | `number` | `365` | no |
 | <a name="input_backup_schedule"></a> [backup\_schedule](#input\_backup\_schedule) | Cron expression for backup schedule | `string` | `"cron(0 2 * * ? *)"` | no |
 | <a name="input_cloudwatch_log_retention_days"></a> [cloudwatch\_log\_retention\_days](#input\_cloudwatch\_log\_retention\_days) | CloudWatch log retention in days | `number` | `365` | no |
