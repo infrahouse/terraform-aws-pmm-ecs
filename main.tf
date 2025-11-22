@@ -1,7 +1,7 @@
 # Website Pod Module for PMM Server
 module "pmm_pod" {
   source  = "infrahouse/website-pod/aws"
-  version = "5.9.0"
+  version = "5.10.0"
 
   providers = {
     aws     = aws
@@ -32,6 +32,9 @@ module "pmm_pod" {
 
   # SSH access
   key_pair_name = var.ssh_key_name
+
+  # Security
+  alb_ingress_cidr_blocks = var.allowed_cidr
 
   # User data to run PMM container
   userdata = data.cloudinit_config.pmm.rendered

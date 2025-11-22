@@ -159,6 +159,12 @@ variable "admin_cidr_block" {
   default     = null
 }
 
+variable "allowed_cidr" {
+  description = "List of CIDR blocks allowed to access the PMM ALB"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 # Security
 variable "rds_security_group_ids" {
   description = <<-EOF
