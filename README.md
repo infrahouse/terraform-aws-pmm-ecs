@@ -30,7 +30,7 @@ Deploy [Percona Monitoring and Management (PMM)](https://www.percona.com/softwar
 ```hcl
 module "pmm" {
   source  = "infrahouse/pmm-ecs/aws"
-  version = "0.2.0"
+  version = "0.3.0"
 
   # Network configuration
   public_subnet_ids  = ["subnet-abc123", "subnet-def456"]
