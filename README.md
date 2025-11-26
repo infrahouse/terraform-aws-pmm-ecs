@@ -12,6 +12,7 @@ Deploy [Percona Monitoring and Management (PMM)](https://www.percona.com/softwar
 - ✅ **Local storage** for database files (ClickHouse, PostgreSQL) to avoid EFS corruption issues
 - ✅ **Automatic SSL/TLS** with ACM certificates via Application Load Balancer
 - ✅ **RDS monitoring support** with automatic security group configuration
+- ✅ **Custom PostgreSQL queries** with configurable collection intervals (high/medium/low resolution)
 - ✅ **CloudWatch monitoring** with alarms for EC2, ALB, and target health
 - ✅ **Auto-generated passwords** stored securely in AWS Secrets Manager
 - ✅ **PMM 3.x by default** (PMM 2 EOL July 2025)
@@ -211,6 +212,106 @@ If metrics aren't appearing:
 
 For detailed RDS monitoring setup, see [docs/RDS_SETUP.md](./docs/RDS_SETUP.md).
 
+## Custom PostgreSQL Queries
+
+PMM allows you to extend PostgreSQL monitoring with custom queries collected at different intervals. This module supports adding custom query files for three resolution levels:
+
+- **High Resolution** - Executed every few seconds (most frequent)
+- **Medium Resolution** - Executed every minute
+- **Low Resolution** - Executed every few minutes (least frequent)
+
+### Adding Custom Queries
+
+Create a YAML file following the [PMM custom queries format](https://docs.percona.com/percona-monitoring-and-management/how-to/extend-metrics.html):
+
+**Example: Medium-resolution query for PostgreSQL activity (`pg-activity.yml`)**:
+```yaml
+---
+pg_activity:
+  query: |
+    SELECT datname, state, wait_event_type, wait_event, COUNT(*) as processes
+    FROM pg_stat_activity
+    WHERE datname !~ '^(postgres|rdsadmin|template(0|1))$'
+    GROUP BY datname, state, wait_event_type, wait_event
+  master: true
+  metrics:
+    - datname:
+        usage: "LABEL"
+        description: "Name of the database"
+    - state:
+        usage: "LABEL"
+        description: "State of the process"
+    - processes:
+        usage: "GAUGE"
+        description: "Processes count (per database, state)"
+```
+
+**Use the query in your module**:
+```hcl
+module "pmm" {
+  source = "infrahouse/pmm-ecs/aws"
+
+  # ... other configuration ...
+
+  # Add custom PostgreSQL queries at different intervals
+  postgresql_custom_queries_high_resolution   = file("${path.module}/queries/pg-connections.yml")
+  postgresql_custom_queries_medium_resolution = file("${path.module}/queries/pg-activity.yml")
+  postgresql_custom_queries_low_resolution    = file("${path.module}/queries/pg-table-stats.yml")
+}
+```
+
+### How It Works
+
+1. **Files Created on EC2**: Custom query files are written to the EC2 instance during initialization via cloud-init
+2. **Mounted into Container**: Files are volume-mounted from the host into the PMM container at the appropriate collection intervals
+3. **PMM Collection**: PMM automatically discovers and executes queries in:
+   - `/usr/local/percona/pmm/collectors/custom-queries/postgresql/high-resolution/`
+   - `/usr/local/percona/pmm/collectors/custom-queries/postgresql/medium-resolution/`
+   - `/usr/local/percona/pmm/collectors/custom-queries/postgresql/low-resolution/`
+
+### Query Format Reference
+
+Each query file should follow this structure:
+
+```yaml
+---
+query_name:
+  query: |
+    SELECT column1, column2, metric_value
+    FROM your_table
+    WHERE conditions
+  master: true  # Run on primary server only
+  metrics:
+    - column1:
+        usage: "LABEL"          # Use as a label
+        description: "Description"
+    - metric_value:
+        usage: "GAUGE"          # Metric type: GAUGE, COUNTER
+        description: "Metric description"
+```
+
+**Key fields**:
+- `query`: SQL query to execute
+- `master`: Set to `true` to run only on primary servers (not replicas)
+- `metrics`: Define how each column should be used (label vs metric)
+- `usage`: Either `LABEL` (for grouping) or metric types (`GAUGE`, `COUNTER`, `HISTOGRAM`)
+
+### Best Practices
+
+- **Choose appropriate resolution**: High-resolution queries execute frequently, so keep them lightweight
+- **Test queries first**: Verify query performance on your database before deploying
+- **Use labels wisely**: Labels create unique metric series; too many labels can cause high cardinality
+- **Set master flag**: For primary-only queries, set `master: true` to avoid running on replicas
+- **Monitor query cost**: Check `pg_stat_statements` to ensure custom queries don't impact performance
+
+### Example Use Cases
+
+- **High Resolution**: Active connection counts, current wait events
+- **Medium Resolution**: Per-database activity, transaction rates, lock monitoring
+- **Low Resolution**: Table statistics, index usage, vacuum progress
+
+For complete query format documentation, see [Percona PMM Documentation](https://docs.percona.com/percona-monitoring-and-management/how-to/extend-metrics.html).
+
 ## Architecture
 
 ```
@@ -371,6 +472,9 @@ For production deployments requiring data persistence across instance replacemen
 | <a name="input_healthcheck_timeout"></a> [healthcheck\_timeout](#input\_healthcheck\_timeout) | Health check timeout in seconds | `number` | `5` | no |
 | <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | EC2 instance type for ECS | `string` | `"m5.large"` | no |
 | <a name="input_pmm_version"></a> [pmm\_version](#input\_pmm\_version) | PMM Docker image version (3 is recommended, PMM 2 EOL July 2025) | `string` | `"3"` | no |
+| <a name="input_postgresql_custom_queries_high_resolution"></a> [postgresql\_custom\_queries\_high\_resolution](#input\_postgresql\_custom\_queries\_high\_resolution) | Custom PostgreSQL queries for high-resolution collection (executed every few seconds).<br/>YAML content following PMM custom queries format.<br/>See: https://docs.percona.com/percona-monitoring-and-management/how-to/extend-metrics.html | `string` | `null` | no |
+| <a name="input_postgresql_custom_queries_low_resolution"></a> [postgresql\_custom\_queries\_low\_resolution](#input\_postgresql\_custom\_queries\_low\_resolution) | Custom PostgreSQL queries for low-resolution collection (executed every few minutes).<br/>YAML content following PMM custom queries format. | `string` | `null` | no |
+| <a name="input_postgresql_custom_queries_medium_resolution"></a> [postgresql\_custom\_queries\_medium\_resolution](#input\_postgresql\_custom\_queries\_medium\_resolution) | Custom PostgreSQL queries for medium-resolution collection (executed every minute).<br/>YAML content following PMM custom queries format. | `string` | `null` | no |
 | <a name="input_private_subnet_ids"></a> [private\_subnet\_ids](#input\_private\_subnet\_ids) | Private subnet IDs for ECS tasks and EFS | `list(string)` | n/a | yes |
 | <a name="input_public_subnet_ids"></a> [public\_subnet\_ids](#input\_public\_subnet\_ids) | Public subnet IDs for ALB | `list(string)` | n/a | yes |
 | <a name="input_rds_security_group_ids"></a> [rds\_security\_group\_ids](#input\_rds\_security\_group\_ids) | Security group IDs of RDS instances to monitor (PMM will be granted access) | `list(string)` | `[]` | no |
@@ -385,6 +489,7 @@ For production deployments requiring data persistence across instance replacemen
 | Name | Description |
 |------|-------------|
 | <a name="output_admin_password_secret_arn"></a> [admin\_password\_secret\_arn](#output\_admin\_password\_secret\_arn) | ARN of the admin password secret in Secrets Manager. Use AWS CLI or Console to retrieve the password. |
+| <a name="output_asg_name"></a> [asg\_name](#output\_asg\_name) | Name of the Auto Scaling Group running PMM server |
 | <a name="output_pmm_url"></a> [pmm\_url](#output\_pmm\_url) | URL to access PMM server |
 <!-- END_TF_DOCS -->
 

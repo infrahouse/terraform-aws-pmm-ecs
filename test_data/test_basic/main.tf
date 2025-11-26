@@ -22,6 +22,8 @@ module "pmm" {
   backup_retention_days         = 7
   cloudwatch_log_retention_days = 7
 
+  # custom queries
+  postgresql_custom_queries_medium_resolution = file("${path.module}/queries/pg-med-res.yml")
 }
 
 # Data source to read the actual admin password from Secrets Manager

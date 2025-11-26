@@ -11,7 +11,7 @@ import pytest
 import requests
 from pytest_infrahouse import terraform_apply
 
-from tests.conftest import TERRAFORM_ROOT_DIR, LOG, configure_postgres_via_ssm
+from tests.conftest import TERRAFORM_ROOT_DIR, LOG, configure_postgres_via_ssm, wait_for_instance_refresh
 
 
 def get_pmm_auth_header(username, password):
@@ -330,6 +330,14 @@ def test_module(
         LOG.info("PMM URL: %s", pmm_url)
         LOG.info("PMM admin password: %s", admin_password)
         LOG.info("PMM ASG name: %s", asg_name)
+
+        # Wait for any in-progress instance refreshes to complete
+        wait_for_instance_refresh(
+            asg_name=asg_name,
+            aws_region=aws_region,
+            test_role_arn=test_role_arn,
+            timeout=600
+        )
 
         # Wait a bit for PMM to be fully ready
         LOG.info("Waiting for PMM to be fully ready...")
