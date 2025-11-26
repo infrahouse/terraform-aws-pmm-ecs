@@ -29,4 +29,6 @@ module "pmm" {
 # Data source to read the actual admin password from Secrets Manager
 data "aws_secretsmanager_secret_version" "admin_password" {
   secret_id = module.pmm.admin_password_secret_arn
+
+  depends_on = [module.pmm]
 }
