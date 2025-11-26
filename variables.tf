@@ -52,6 +52,35 @@ variable "disable_telemetry" {
   default     = true
 }
 
+# Custom PostgreSQL Queries
+variable "postgresql_custom_queries_high_resolution" {
+  description = <<-EOF
+    Custom PostgreSQL queries for high-resolution collection (executed every few seconds).
+    YAML content following PMM custom queries format.
+    See: https://docs.percona.com/percona-monitoring-and-management/how-to/extend-metrics.html
+  EOF
+  type        = string
+  default     = null
+}
+
+variable "postgresql_custom_queries_medium_resolution" {
+  description = <<-EOF
+    Custom PostgreSQL queries for medium-resolution collection (executed every minute).
+    YAML content following PMM custom queries format.
+  EOF
+  type        = string
+  default     = null
+}
+
+variable "postgresql_custom_queries_low_resolution" {
+  description = <<-EOF
+    Custom PostgreSQL queries for low-resolution collection (executed every few minutes).
+    YAML content following PMM custom queries format.
+  EOF
+  type        = string
+  default     = null
+}
+
 # Compute resources
 variable "instance_type" {
   description = "EC2 instance type for ECS"

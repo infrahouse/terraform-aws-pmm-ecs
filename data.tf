@@ -88,34 +88,38 @@ data "cloudinit_config" "pmm" {
               "docker-compose-plugin",
               "awscli"
             ]
-            write_files : [
-              {
-                path : "/usr/local/bin/get-pmm-password.sh"
-                permissions : "0755"
-                content : templatefile("${path.module}/templates/get-pmm-password.sh.tftpl", {
-                  admin_password = module.admin_password_secret.secret_arn
-                  aws_region     = data.aws_region.current.name
-                })
-              },
-              {
-                path : "/usr/local/bin/set-pmm-password.sh"
-                permissions : "0755"
-                content : file("${path.module}/templates/set-pmm-password.sh.tftpl")
-              },
-              {
-                path : "/etc/systemd/system/pmm-server.service"
-                permissions : "0644"
-                content : templatefile("${path.module}/templates/pmm-server.service.tftpl", {
-                  docker_image      = local.docker_image
-                  disable_telemetry = var.disable_telemetry
-                })
-              },
-              {
-                path : "/etc/systemd/system/set-pmm-password.service"
-                permissions : "0644"
-                content : file("${path.module}/templates/set-pmm-password.service.tftpl")
-              }
-            ]
+            write_files : concat(
+              [
+                {
+                  path : "/usr/local/bin/get-pmm-password.sh"
+                  permissions : "0755"
+                  content : templatefile("${path.module}/templates/get-pmm-password.sh.tftpl", {
+                    admin_password = module.admin_password_secret.secret_arn
+                    aws_region     = data.aws_region.current.name
+                  })
+                },
+                {
+                  path : "/usr/local/bin/set-pmm-password.sh"
+                  permissions : "0755"
+                  content : file("${path.module}/templates/set-pmm-password.sh.tftpl")
+                },
+                {
+                  path : "/etc/systemd/system/pmm-server.service"
+                  permissions : "0644"
+                  content : templatefile("${path.module}/templates/pmm-server.service.tftpl", {
+                    docker_image               = local.docker_image
+                    disable_telemetry          = var.disable_telemetry
+                    custom_query_volume_mounts = local.custom_query_volume_mounts
+                  })
+                },
+                {
+                  path : "/etc/systemd/system/set-pmm-password.service"
+                  permissions : "0644"
+                  content : file("${path.module}/templates/set-pmm-password.service.tftpl")
+                }
+              ],
+              local.custom_query_files
+            )
             runcmd : [
               # Create PMM data directories
               ["bash", "-c", "mkdir -p /mnt/pmm-data/{postgres14,clickhouse,grafana,logs,backup}"],

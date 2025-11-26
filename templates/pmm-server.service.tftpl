@@ -13,7 +13,8 @@ ExecStart=/usr/bin/docker run --rm \
   --name pmm-server \
   -p 0.0.0.0:443:8443 \
   -p 0.0.0.0:80:8080 \
-  -v /mnt/pmm-data:/srv \
+  -v /mnt/pmm-data:/srv %{if custom_query_volume_mounts != ""}\
+  ${custom_query_volume_mounts} %{endif}\
   -e DISABLE_TELEMETRY=${disable_telemetry} \
   ${docker_image}
 ExecStop=/usr/bin/docker stop pmm-server
