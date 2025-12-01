@@ -1,7 +1,7 @@
 # Website Pod Module for PMM Server
 module "pmm_pod" {
   source  = "infrahouse/website-pod/aws"
-  version = "5.10.0"
+  version = "5.12.1"
 
   providers = {
     aws     = aws
