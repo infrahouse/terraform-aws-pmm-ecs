@@ -1,0 +1,29 @@
+#!/bin/bash
+set -e
+
+echo "Installing Docker and dependencies..."
+
+# Install dependencies
+apt-get update
+apt-get install -y ca-certificates curl file
+
+# Create keyrings directory
+install -m 0755 -d /etc/apt/keyrings
+
+# Add Docker's official GPG key
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add Docker repository
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${ubuntu_codename} stable" > /etc/apt/sources.list.d/docker.list
+
+# Add InfraHouse GPG key
+curl -fsSL https://release-${ubuntu_codename}.infrahouse.com/DEB-GPG-KEY-release-${ubuntu_codename}.infrahouse.com | gpg --dearmor -o /etc/apt/keyrings/infrahouse.gpg
+
+# Add InfraHouse repository
+echo "deb [signed-by=/etc/apt/keyrings/infrahouse.gpg] https://release-${ubuntu_codename}.infrahouse.com/ ${ubuntu_codename} main" > /etc/apt/sources.list.d/infrahouse.list
+
+# Update package lists
+apt-get update
+
+echo "Docker repository setup completed"

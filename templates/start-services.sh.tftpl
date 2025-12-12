@@ -1,0 +1,57 @@
+#!/bin/bash
+set -e
+
+echo "Starting services..."
+
+# Wait for EBS mount to be ready
+echo "Checking EBS mount at /srv..."
+while ! mountpoint -q /srv; do
+    echo "Waiting for /srv to be mounted..."
+    sleep 1
+done
+echo "EBS volume is mounted at /srv"
+
+# Verify PMM directories exist
+if [ ! -d "/srv/pmm-data" ]; then
+    echo "ERROR: PMM data directory /srv/pmm-data does not exist!"
+    exit 1
+fi
+echo "PMM directories verified"
+
+# Enable and start Docker
+echo "Starting Docker..."
+systemctl enable docker
+systemctl start docker
+
+# Wait for Docker to be ready
+until docker info >/dev/null 2>&1; do
+    echo "Waiting for Docker to be ready..."
+    sleep 2
+done
+
+# Start CloudWatch agent for detailed monitoring
+echo "Starting CloudWatch agent..."
+systemctl enable amazon-cloudwatch-agent
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config \
+    -m ec2 \
+    -s \
+    -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+# Reload systemd to pick up new service files
+systemctl daemon-reload
+
+# Enable and start PMM server
+echo "Starting PMM server..."
+systemctl enable pmm-server
+systemctl start pmm-server
+
+# Wait a bit for PMM to initialize
+sleep 10
+
+# Enable and start password setter (will wait for PMM to be ready)
+echo "Setting PMM admin password..."
+systemctl enable set-pmm-password
+systemctl start set-pmm-password
+
+echo "All services started successfully"

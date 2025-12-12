@@ -27,8 +27,8 @@ resource "aws_instance" "pmm_server" {
     )
   }
 
-  # User data for PMM setup
-  user_data                   = data.cloudinit_config.pmm.rendered
+  # User data for PMM setup with persistent storage
+  user_data                   = data.cloudinit_config.pmm_persistent.rendered
   user_data_replace_on_change = true
 
   # Instance metadata options

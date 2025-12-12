@@ -146,7 +146,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_auto_recovery" {
 }
 ```
 
-#### 1.4 Update User Data Script
+#### 1.4 Update User Data Script ✅ COMPLETED
 ```bash
 #!/bin/bash
 set -e
