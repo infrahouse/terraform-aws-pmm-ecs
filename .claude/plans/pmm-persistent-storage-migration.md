@@ -76,7 +76,7 @@ resource "aws_ebs_volume" "pmm_data" {
 }
 ```
 
-#### 1.2 Create EC2 Instance Resource
+#### 1.2 Create EC2 Instance Resource ✅ COMPLETED
 ```hcl
 # ec2.tf
 resource "aws_instance" "pmm_server" {
@@ -273,20 +273,55 @@ Since there are no existing live setups, we can implement the new architecture d
 
 #### 4.1 Implementation Steps
 1. **Remove website-pod module** dependency from main.tf
-2. **Implement new EC2-based resources** as designed
-3. **Deploy to test environment** first
+2. **Implement new EC2-based resources** as designed:
+   - Create `ec2.tf` with instance configuration
+   - Create `ebs.tf` with persistent volume
+   - Update `main.tf` to remove website-pod module
+   - Update `data.tf` for user data configuration
+   - Create/update ALB target group configuration
+3. **Run local tests with `make test-keep`** ← You can test at this point!
 4. **Validate all functionality** works correctly
 5. **Deploy to production** environments as needed
 
-#### 4.2 Testing Checklist
+#### 4.2 When You Can Run Tests
+After completing the following files, you'll be able to run `make test-keep`:
+- ✅ `ec2.tf` - EC2 instance resource
+- ✅ `ebs.tf` - EBS volume and attachment
+- ✅ Updated `main.tf` - Remove website-pod, add new resources
+- ✅ Updated user data - Mount EBS and run PMM container
+- ✅ ALB target group attachment
+
+#### 4.3 Testing with `make test-keep`
+```bash
+# Run the test to create PMM with RDS
+make test-keep
+
+# This will:
+# 1. Deploy PMM with new EC2/EBS architecture
+# 2. Attach an RDS instance for monitoring
+# 3. Keep infrastructure running for validation
+
+# After testing is complete:
+# - Verify PMM web interface is accessible
+# - Check that RDS is being monitored
+# - Stop/start EC2 instance to verify data persistence
+# - Check that data survived the restart
+
+# Clean up when done:
+make test-clean  # or similar command
+```
+
+#### 4.4 Testing Checklist
+- [ ] Run `make test-keep` successfully
 - [ ] EC2 instance launches successfully
 - [ ] EBS volume attaches and mounts correctly
 - [ ] PMM container starts with persistent volumes
 - [ ] ALB health checks pass
 - [ ] DNS resolution works
 - [ ] PMM web interface accessible
+- [ ] RDS instance connects and is monitored
 - [ ] Data persists after instance stop/start
-- [ ] Auto-recovery triggers on failure
+- [ ] Auto-recovery triggers on failure (optional test)
 - [ ] Backups complete successfully
 
 #### 4.3 No Rollback Needed
