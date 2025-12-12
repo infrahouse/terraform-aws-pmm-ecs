@@ -20,7 +20,9 @@
       "WebFetch(domain:forums.percona.com)",
       "WebFetch(domain:www.pythian.com)",
       "WebFetch(domain:pkg.go.dev)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
