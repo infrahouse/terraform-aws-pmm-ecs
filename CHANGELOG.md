@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2025-12-13
+
+### Bug Fixes
+
+- Resolve critical cloud-init failures preventing EBS mount
+
+### Documentation
+
+- Complete documentation for persistent storage migration
+
+### Features
+
+- Add EC2 instance configuration for persistent storage
+- Add EBS persistent storage configuration
+- Add comprehensive auto-recovery and monitoring
+- Implement user data for persistent EBS storage
+- Implement AWS Backup and ALB configuration
+- Complete PMM persistent storage migration with monitoring and backup
+- Address PR review comments and improve production defaults
+
+### Miscellaneous Tasks
+
+- Prepare for persistent storage refactor
+
 ## [0.3.0] - 2025-11-26
 
 ## [0.2.0] - 2025-11-22
