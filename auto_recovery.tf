@@ -48,7 +48,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_instance_check" {
   }
 
   # Send notifications but don't auto-recover (instance issues often need investigation)
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
@@ -75,7 +75,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_status_check_failed" {
     InstanceId = aws_instance.pmm_server.id
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
@@ -104,7 +104,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_high_memory" {
     InstanceId = aws_instance.pmm_server.id
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
@@ -131,12 +131,12 @@ resource "aws_cloudwatch_metric_alarm" "pmm_root_disk_space" {
 
   dimensions = {
     InstanceId = aws_instance.pmm_server.id
-    device     = "xvda1"
+    device     = local.root_device_name
     fstype     = "ext4"
     path       = "/"
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
@@ -163,12 +163,12 @@ resource "aws_cloudwatch_metric_alarm" "pmm_data_disk_space" {
 
   dimensions = {
     InstanceId = aws_instance.pmm_server.id
-    device     = "xvdf"
+    device     = local.data_device_name
     fstype     = "ext4"
     path       = "/srv"
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
@@ -192,13 +192,10 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
         properties = {
           title   = "EC2 Instance Status"
           metrics = [
-            ["AWS/EC2", "StatusCheckFailed", { stat = "Maximum", label = "Total Failures" }],
-            [".", "StatusCheckFailed_System", { stat = "Maximum", label = "System Failures" }],
-            [".", "StatusCheckFailed_Instance", { stat = "Maximum", label = "Instance Failures" }]
+            ["AWS/EC2", "StatusCheckFailed", "InstanceId", aws_instance.pmm_server.id, { stat = "Maximum", label = "Total Failures" }],
+            ["AWS/EC2", "StatusCheckFailed_System", "InstanceId", aws_instance.pmm_server.id, { stat = "Maximum", label = "System Failures" }],
+            ["AWS/EC2", "StatusCheckFailed_Instance", "InstanceId", aws_instance.pmm_server.id, { stat = "Maximum", label = "Instance Failures" }]
           ]
-          dimensions = {
-            InstanceId = aws_instance.pmm_server.id
-          }
           period = 300
           stat   = "Average"
           region = data.aws_region.current.name
@@ -210,12 +207,9 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
         properties = {
           title   = "CPU and Memory Utilization"
           metrics = [
-            ["AWS/EC2", "CPUUtilization", { stat = "Average", label = "CPU %" }],
-            ["CWAgent", "mem_used_percent", { stat = "Average", label = "Memory %" }]
+            ["AWS/EC2", "CPUUtilization", "InstanceId", aws_instance.pmm_server.id, { stat = "Average", label = "CPU %" }],
+            ["CWAgent", "mem_used_percent", ".", ".", { stat = "Average", label = "Memory %" }]
           ]
-          dimensions = {
-            InstanceId = aws_instance.pmm_server.id
-          }
           period = 300
           stat   = "Average"
           region = data.aws_region.current.name
@@ -227,12 +221,9 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
         properties = {
           title   = "Disk Usage"
           metrics = [
-            ["CWAgent", "disk_used_percent", { stat = "Average", label = "Root Volume", dimensions = { device = "xvda1", path = "/" } }],
-            [".", ".", { stat = "Average", label = "Data Volume", dimensions = { device = "xvdf", path = "/srv" } }]
+            ["CWAgent", "disk_used_percent", "device", local.root_device_name, "fstype", "ext4", "path", "/", "InstanceId", aws_instance.pmm_server.id, { stat = "Average", label = "Root Volume" }],
+            ["CWAgent", "disk_used_percent", "device", local.data_device_name, "fstype", "ext4", "path", "/srv", "InstanceId", aws_instance.pmm_server.id, { stat = "Average", label = "Data Volume" }]
           ]
-          dimensions = {
-            InstanceId = aws_instance.pmm_server.id
-          }
           period = 300
           stat   = "Average"
           region = data.aws_region.current.name
@@ -244,13 +235,10 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
         properties = {
           title   = "EBS Volume Performance"
           metrics = [
-            ["AWS/EBS", "VolumeReadOps", { stat = "Sum", label = "Read Ops" }],
-            [".", "VolumeWriteOps", { stat = "Sum", label = "Write Ops" }],
-            [".", "BurstBalance", { stat = "Average", label = "Burst Balance %" }]
+            ["AWS/EBS", "VolumeReadOps", "VolumeId", aws_ebs_volume.pmm_data.id, { stat = "Sum", label = "Read Ops" }],
+            [".", "VolumeWriteOps", ".", ".", { stat = "Sum", label = "Write Ops" }],
+            [".", "BurstBalance", ".", ".", { stat = "Average", label = "Burst Balance %" }]
           ]
-          dimensions = {
-            VolumeId = aws_ebs_volume.pmm_data.id
-          }
           period = 300
           stat   = "Average"
           region = data.aws_region.current.name

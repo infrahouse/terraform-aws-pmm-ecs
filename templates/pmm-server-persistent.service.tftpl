@@ -20,8 +20,8 @@ ExecStartPre=-/usr/bin/docker rm pmm-server
 # Start PMM Server with persistent volumes mounted from /srv
 ExecStart=/usr/bin/docker run \
     --name pmm-server \
-    --publish 80:80 \
-    --publish 443:443 \
+    --publish 80:8080 \
+    --publish 443:8443 \
     --restart on-failure \
     --volume /srv/pmm-data:/srv \
     --volume /srv/postgres14:/srv/postgres14 \
@@ -33,7 +33,7 @@ ExecStart=/usr/bin/docker run \
     --volume /srv/backup:/srv/backup \
     ${custom_query_volume_mounts} \
     --env DISABLE_TELEMETRY=${disable_telemetry ? "1" : "0"} \
-    --env PMM_PUBLIC_ADDRESS=$$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || echo "localhost") \
+    --env PMM_PUBLIC_ADDRESS=${pmm_public_address} \
     ${docker_image}
 
 # Stop the container

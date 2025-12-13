@@ -58,7 +58,7 @@ resource "aws_cloudwatch_metric_alarm" "ebs_burst_balance" {
     VolumeId = aws_ebs_volume.pmm_data.id
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = local.common_tags
 }
@@ -80,7 +80,7 @@ resource "aws_cloudwatch_metric_alarm" "ebs_high_iops" {
     VolumeId = aws_ebs_volume.pmm_data.id
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = local.common_tags
 }

@@ -21,6 +21,14 @@ module "pmm" {
   # Use shorter retention for tests
   backup_retention_days         = 7
   cloudwatch_log_retention_days = 7
+  alb_logs_retention_days       = 7
+
+  # Enable force destroy for test cleanup
+  backup_vault_force_destroy     = true
+  alb_logs_bucket_force_destroy  = true
+
+  # Alarm notifications
+  alarm_emails = var.alarm_emails
 
   # custom queries
   postgresql_custom_queries_medium_resolution = file("${path.module}/queries/pg-med-res.yml")

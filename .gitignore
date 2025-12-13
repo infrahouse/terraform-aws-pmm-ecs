@@ -52,3 +52,7 @@ Thumbs.db
 # Test artifacts
 test_output/
 .terraform.lock.hcl
+
+# Claude Code local settings
+.claude/*.local.json
+.claude/reviews/

@@ -4,18 +4,31 @@ set -e
 echo "Starting EBS volume setup..."
 
 # Wait for EBS volume to be attached
-DEVICE="/dev/xvdf"
+# On NVMe instances, EBS volumes appear as /dev/nvme[1-26]n1
+# On older instances, they appear as /dev/xvdf
 MAX_ATTEMPTS=60
 ATTEMPT=0
 
-while [ ! -e "$DEVICE" ]; do
+DEVICE=""
+while [ -z "$DEVICE" ]; do
   if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
     echo "ERROR: EBS volume not attached after $MAX_ATTEMPTS attempts"
     exit 1
   fi
-  echo "Waiting for EBS volume at $DEVICE... (attempt $((ATTEMPT+1))/$MAX_ATTEMPTS)"
-  sleep 5
-  ATTEMPT=$((ATTEMPT+1))
+
+  # Try NVMe device first (for modern instance types)
+  if [ -e /dev/nvme1n1 ]; then
+    DEVICE="/dev/nvme1n1"
+  # Fall back to traditional naming
+  elif [ -e /dev/xvdf ]; then
+    DEVICE="/dev/xvdf"
+  fi
+
+  if [ -z "$DEVICE" ]; then
+    echo "Waiting for EBS volume... (attempt $((ATTEMPT+1))/$MAX_ATTEMPTS)"
+    sleep 5
+    ATTEMPT=$((ATTEMPT+1))
+  fi
 done
 
 echo "EBS volume found at $DEVICE"

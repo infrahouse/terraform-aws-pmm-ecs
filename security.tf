@@ -21,6 +21,14 @@ data "aws_iam_policy_document" "pmm_instance" {
       module.admin_password_secret.secret_arn
     ]
   }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricData"
+    ]
+    resources = ["*"]
+  }
 }
 
 # IAM policy for EC2 instance
@@ -33,11 +41,8 @@ resource "aws_iam_policy" "pmm_instance" {
   tags = local.common_tags
 }
 
-# Attach instance policy to the role created by the website-pod module
-resource "aws_iam_role_policy_attachment" "pmm_instance" {
-  role       = module.pmm_pod.instance_role_name
-  policy_arn = aws_iam_policy.pmm_instance.arn
-}
+# Note: IAM role policy attachment is now handled in ec2.tf
+# The aws_iam_role_policy_attachment.pmm_custom resource attaches this policy
 
 # Allow PMM to access RDS instances on port 5432 (PostgreSQL)
 resource "aws_security_group_rule" "pmm_to_rds_postgres" {
@@ -47,7 +52,7 @@ resource "aws_security_group_rule" "pmm_to_rds_postgres" {
   from_port                = 5432
   to_port                  = 5432
   protocol                 = "tcp"
-  source_security_group_id = module.pmm_pod.backend_security_group.backend.id
+  source_security_group_id = aws_security_group.pmm_instance.id
   security_group_id        = var.rds_security_group_ids[count.index]
   description              = "Allow PMM server to connect to PostgreSQL"
 }
@@ -71,7 +76,7 @@ module "admin_password_secret" {
   readers = concat(
     var.secret_readers,
     [
-      module.pmm_pod.instance_role_arn,
+      aws_iam_role.pmm_instance.arn,
     ]
   )
 

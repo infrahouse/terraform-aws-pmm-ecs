@@ -3,8 +3,9 @@
 
 # Backup vault for storing snapshots
 resource "aws_backup_vault" "pmm" {
-  name        = "${local.service_name}-backup-vault"
-  kms_key_id  = var.backup_kms_key_id
+  name         = "${local.service_name}-backup-vault"
+  kms_key_arn  = var.backup_kms_key_id # Note: Despite the variable name, this needs to be an ARN
+  force_destroy = var.backup_vault_force_destroy
 
   tags = merge(
     local.common_tags,
@@ -121,13 +122,6 @@ resource "aws_backup_selection" "pmm" {
       value = "true"
     }
   }
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${local.service_name}-backup-selection"
-    }
-  )
 }
 
 # CloudWatch alarm for backup failures
@@ -148,7 +142,7 @@ resource "aws_cloudwatch_metric_alarm" "backup_failed" {
     BackupVaultName = aws_backup_vault.pmm.name
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
