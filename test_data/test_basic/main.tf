@@ -22,12 +22,12 @@ module "pmm" {
   ]
 
   # Use shorter retention for tests
-  backup_retention_days         = 7
-  alb_logs_retention_days       = 7
+  backup_retention_days   = 7
+  alb_logs_retention_days = 7
 
   # Enable force destroy for test cleanup
-  backup_vault_force_destroy     = true
-  alb_logs_bucket_force_destroy  = true
+  backup_vault_force_destroy    = true
+  alb_logs_bucket_force_destroy = true
 
   # Alarm notifications
   alarm_emails = var.alarm_emails

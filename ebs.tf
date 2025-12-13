@@ -75,7 +75,7 @@ resource "aws_cloudwatch_metric_alarm" "ebs_high_iops" {
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 2
-  threshold           = var.ebs_iops * 300 * 0.8  # 80% of provisioned IOPS over 5 minutes
+  threshold           = var.ebs_iops * 300 * 0.8 # 80% of provisioned IOPS over 5 minutes
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
 

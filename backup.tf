@@ -3,8 +3,8 @@
 
 # Backup vault for storing snapshots
 resource "aws_backup_vault" "pmm" {
-  name         = "${local.service_name}-backup-vault"
-  kms_key_arn  = var.backup_kms_key_id # Note: Despite the variable name, this needs to be an ARN
+  name          = "${local.service_name}-backup-vault"
+  kms_key_arn   = var.backup_kms_key_id # Note: Despite the variable name, this needs to be an ARN
   force_destroy = var.backup_vault_force_destroy
 
   tags = merge(
@@ -24,8 +24,8 @@ resource "aws_backup_plan" "pmm" {
     rule_name         = "daily_backup"
     target_vault_name = aws_backup_vault.pmm.name
     schedule          = var.backup_schedule # Default: "cron(0 5 ? * * *)" - Daily at 5 AM UTC
-    start_window      = 60                   # 60 minutes to start backup
-    completion_window = 120                  # 120 minutes to complete backup
+    start_window      = 60                  # 60 minutes to start backup
+    completion_window = 120                 # 120 minutes to complete backup
 
     lifecycle {
       delete_after = var.backup_retention_days
