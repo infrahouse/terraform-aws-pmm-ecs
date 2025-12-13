@@ -7,13 +7,15 @@ Deploy [Percona Monitoring and Management (PMM)](https://www.percona.com/softwar
 
 ## Features
 
-- ✅ **Production-ready PMM deployment** on EC2 with Auto Scaling Group (singleton for data consistency)
+- ✅ **Production-ready PMM deployment** on dedicated EC2 instance with persistent EBS storage
+- ✅ **Persistent storage** using separate EBS volume mounted at `/srv` for PMM data
+- ✅ **Automated backups** via AWS Backup with configurable retention (30 days default)
+- ✅ **Auto-recovery** for hardware failures with EC2 auto-recovery and CloudWatch alarms
 - ✅ **Docker-based deployment** with systemd service management
-- ✅ **Local storage** for database files (ClickHouse, PostgreSQL) to avoid EFS corruption issues
-- ✅ **Automatic SSL/TLS** with ACM certificates via Application Load Balancer
+- ✅ **Automatic SSL/TLS** with ACM certificates and DNS validation via Application Load Balancer
 - ✅ **RDS monitoring support** with automatic security group configuration
 - ✅ **Custom PostgreSQL queries** with configurable collection intervals (high/medium/low resolution)
-- ✅ **CloudWatch monitoring** with alarms for EC2, ALB, and target health
+- ✅ **Comprehensive CloudWatch monitoring** with dashboard and alarms for instance, disk, memory, and EBS metrics
 - ✅ **Auto-generated passwords** stored securely in AWS Secrets Manager
 - ✅ **PMM 3.x by default** (PMM 2 EOL July 2025)
 - ✅ **Ubuntu Pro 24.04 LTS** with official Docker CE installation
@@ -320,43 +322,52 @@ For complete query format documentation, see [Percona PMM Documentation](https:/
 └────────────────────────┬────────────────────────────────────┘
                          │
                     ┌────▼────┐
-                    │   ALB   │  (HTTPS, ACM Certificate)
+                    │   ALB   │  (HTTPS, ACM Certificate + DNS Validation)
                     │  (Public│
                     │ Subnets)│
                     └────┬────┘
                          │
-     ┌───────────────────┼──────────────────────────┐
-     │  Auto Scaling Group (min=1, max=1)           │
-     │  ┌────────────────▼─────────────────────┐    │
-     │  │   EC2 Instance (Ubuntu Pro 24.04)    │    │
-     │  │   ┌──────────────────────────────┐   │    │
-     │  │   │  PMM Docker Container        │   │    │
-     │  │   │  - nginx: 8080/8443          │   │    │
-     │  │   │  - ClickHouse (local /srv)   │   │    │
-     │  │   │  - PostgreSQL (local /srv)   │   │    │
-     │  │   │  - Grafana (local /srv)      │   │    │
-     │  │   └──────────────────────────────┘   │    │
-     │  │   Managed by systemd                 │    │
-     │  └──────────────────────────────────────┘    │
-     │  (Private Subnets)                           │
-     └───────────────────┼──────────────────────────┘
-                         │
-                  ┌──────▼─────────┐
-                  │  Secrets       │
-                  │  Manager       │
-                  │  (Password)    │
-                  └────────────────┘
+        ┌────────────────▼────────────────────┐
+        │   EC2 Instance (Ubuntu Pro 24.04)   │
+        │   ┌──────────────────────────────┐  │
+        │   │  PMM Docker Container        │  │
+        │   │  - nginx: 8080/8443          │  │
+        │   │  - ClickHouse (/srv)         │  │
+        │   │  - PostgreSQL (/srv)         │  │
+        │   │  - Grafana (/srv)            │  │
+        │   └──────────────────────────────┘  │
+        │   Managed by systemd                │
+        │                                     │
+        │   ┌──────────────────────────────┐  │
+        │   │  EBS Data Volume (100GB)     │  │
+        │   │  Mounted at /srv             │  │
+        │   │  GP3 with encryption         │  │
+        │   └──────────────────────────────┘  │
+        │  (Private Subnet)                   │
+        │                                     │
+        │  - EC2 Auto-Recovery enabled        │
+        │  - CloudWatch Agent for monitoring  │
+        └──────────────────┬──────────────────┘
+                           │
+             ┌─────────────┼──────────────┐
+             │             │              │
+      ┌──────▼──────┐  ┌───▼────┐  ┌──────▼──────┐
+      │  Secrets    │  │ AWS    │  │ CloudWatch  │
+      │  Manager    │  │ Backup │  │ Dashboard   │
+      │ (Password)  │  │(Daily) │  │ + Alarms    │
+      └─────────────┘  └────────┘  └─────────────┘
 ```
 
 ### Key Components
 
-- **Application Load Balancer (ALB)**: HTTPS endpoint with ACM certificate, routes to EC2 instances
-- **Auto Scaling Group**: Single-instance deployment (min=1, max=1) for data consistency
-- **EC2 Instance**: Ubuntu Pro 24.04 LTS with Docker CE
-- **PMM Docker Container**: Runs via systemd, manages all PMM services
-- **Local Storage**: Database files (ClickHouse, PostgreSQL) stored on EBS to avoid EFS corruption
+- **Application Load Balancer (ALB)**: HTTPS endpoint with ACM certificate (DNS validation), routes to EC2 instance
+- **EC2 Instance**: Single dedicated instance (Ubuntu Pro 24.04 LTS) with Docker CE and auto-recovery
+- **EBS Data Volume**: Separate 100GB encrypted GP3 volume mounted at `/srv` for persistent storage
+- **PMM Docker Container**: Runs via systemd, manages all PMM services (ClickHouse, PostgreSQL, Grafana)
+- **AWS Backup**: Daily automated snapshots with 30-day retention (configurable)
 - **Secrets Manager**: Auto-generated 32-character admin password
-- **CloudWatch**: Monitoring and alarms for EC2, ALB, and target health
+- **CloudWatch**: Dashboard with instance metrics + alarms for EC2, ALB, memory, disk, and EBS burst balance
+- **CloudWatch Agent**: Collects memory and disk usage metrics from the instance
 
 ## Examples
 
@@ -387,17 +398,25 @@ PMM telemetry is **disabled by default** (`disable_telemetry = true`). PMM colle
 
 ### Data Persistence
 
-**Important**: This module uses **local EBS storage** for PMM database files (ClickHouse, PostgreSQL, Grafana).
+This module uses **persistent EBS storage** for all PMM data with automated backups.
 
-- **Why local storage?** EFS eventual consistency caused database corruption issues
-- **What this means**: If the EC2 instance is terminated, monitoring history is lost
-- **Trade-off**: Accepted for monitoring use case where historical data is less critical than operational stability
-- **Grafana dashboards**: Configurations stored in `/srv/grafana` on local disk
+**How it works:**
+- Separate 100GB EBS volume (GP3, encrypted) mounted at `/srv`
+- All PMM databases (ClickHouse, PostgreSQL) and Grafana configs stored on this volume
+- Data persists across EC2 instance stop/start and Docker container restarts
+- Automated daily backups via AWS Backup (30-day retention by default, configurable)
 
-For production deployments requiring data persistence across instance replacements, consider:
-- Automated EBS snapshots
-- Exporting critical dashboards to version control
-- Using PMM primarily for real-time monitoring rather than long-term historical analysis
+**Benefits over EFS:**
+- No corruption issues (EFS eventual consistency caused problems)
+- Better performance and consistent I/O
+- Simpler architecture
+- Point-in-time recovery via EBS snapshots
+
+**Backup & Recovery:**
+- Backups run daily at 5 AM UTC (configurable via `backup_schedule`)
+- Retention period is 30 days by default (configurable via `backup_retention_days`)
+- To restore from backup: Create new EBS volume from snapshot, attach to instance
+- See [docs/BACKUP_RESTORE.md](./docs/BACKUP_RESTORE.md) for detailed procedures
 
 ### Security
 
@@ -514,19 +533,32 @@ sudo systemctl status pmm-server
 
 ## Data Persistence
 
-**Important**: PMM databases (ClickHouse, PostgreSQL, Grafana) are stored on **local EBS volumes**.
+PMM data is stored on a **persistent EBS data volume** (separate from the EC2 instance root volume) mounted at `/srv`.
 
-- Data persists across container restarts
-- Data is **lost** if EC2 instance is terminated
-- For critical Grafana dashboards, export to version control
-- Consider automated EBS snapshots for disaster recovery
+**Storage Details:**
+- Separate 100GB EBS volume (GP3 by default, configurable)
+- Encrypted at rest with KMS
+- Contains all PMM databases (ClickHouse, PostgreSQL, Grafana configs)
+- Data **persists** across EC2 instance stop/start, replacements, and Docker container restarts
+- Automated daily backups via AWS Backup (30-day retention by default)
 
-**Why local storage?**
-EFS eventual consistency caused database corruption. Local storage provides:
-- Consistent I/O for database operations
-- Better performance
-- Simpler architecture
-- Trade-off: Monitoring data is transient (acceptable for most use cases)
+**Configuration:**
+```hcl
+module "pmm" {
+  # ... other settings ...
+
+  ebs_volume_size         = 100  # GB, adjust based on your metrics retention needs
+  ebs_volume_type         = "gp3"
+  ebs_iops                = 3000
+  backup_retention_days   = 30
+}
+```
+
+**Backup & Recovery:**
+- Daily backups at 5 AM UTC (configurable via `backup_schedule`)
+- Optional weekly backups with longer retention
+- Point-in-time recovery from any backup
+- See [docs/BACKUP_RESTORE.md](./docs/BACKUP_RESTORE.md) for restore procedures
 
 ## Troubleshooting
 

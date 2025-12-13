@@ -182,10 +182,10 @@ variable "enable_auto_recovery" {
 
 variable "enable_detailed_monitoring" {
   description = <<-EOF
-    Enable detailed monitoring (CloudWatch Agent metrics)
+    Enable detailed monitoring (CloudWatch Agent metrics for memory and disk usage)
   EOF
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ALB Configuration

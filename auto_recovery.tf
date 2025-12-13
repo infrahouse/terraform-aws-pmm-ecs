@@ -179,6 +179,35 @@ resource "aws_cloudwatch_metric_alarm" "pmm_data_disk_space" {
   )
 }
 
+# EBS burst balance alarm
+resource "aws_cloudwatch_metric_alarm" "pmm_ebs_burst_balance" {
+  count = var.enable_detailed_monitoring && var.ebs_volume_type == "gp3" ? 1 : 0
+
+  alarm_name          = "${local.service_name}-ebs-burst-balance"
+  alarm_description   = "Alert when EBS volume burst balance is low"
+  namespace           = "AWS/EBS"
+  metric_name         = "BurstBalance"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 20
+  comparison_operator = "LessThanThreshold"
+
+  dimensions = {
+    VolumeId = aws_ebs_volume.pmm_data.id
+  }
+
+  alarm_actions = local.all_alarm_targets
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.service_name}-burst-balance"
+      Type = "monitoring"
+    }
+  )
+}
+
 # CloudWatch dashboard for monitoring
 resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
   count = var.create_dashboard ? 1 : 0
