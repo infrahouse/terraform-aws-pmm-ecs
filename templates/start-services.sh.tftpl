@@ -11,12 +11,12 @@ while ! mountpoint -q /srv; do
 done
 echo "EBS volume is mounted at /srv"
 
-# Verify PMM directories exist
-if [ ! -d "/srv/pmm-data" ]; then
-    echo "ERROR: PMM data directory /srv/pmm-data does not exist!"
+# Verify /srv is writable (PMM will create subdirectories on first boot)
+if [ ! -w "/srv" ]; then
+    echo "ERROR: /srv is not writable!"
     exit 1
 fi
-echo "PMM directories verified"
+echo "EBS mount verified and writable"
 
 # Enable and start Docker
 echo "Starting Docker..."

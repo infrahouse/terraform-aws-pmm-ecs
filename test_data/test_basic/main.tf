@@ -17,10 +17,12 @@ module "pmm" {
   rds_security_group_ids = [
     var.postgres_security_group_id
   ]
+  allowed_cidr = [
+    "0.0.0.0/0"
+  ]
 
   # Use shorter retention for tests
   backup_retention_days         = 7
-  cloudwatch_log_retention_days = 7
   alb_logs_retention_days       = 7
 
   # Enable force destroy for test cleanup
