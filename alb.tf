@@ -59,14 +59,11 @@ resource "aws_lb" "pmm" {
   enable_http2              = true
   enable_cross_zone_load_balancing = true
 
-  # Access logs (optional)
-  dynamic "access_logs" {
-    for_each = var.alb_access_logs_bucket != "" ? [1] : []
-    content {
-      bucket  = var.alb_access_logs_bucket
-      prefix  = local.service_name
-      enabled = true
-    }
+  # Access logs
+  access_logs {
+    bucket  = module.alb_logs_bucket.bucket_name
+    prefix  = local.service_name
+    enabled = true
   }
 
   tags = merge(
@@ -154,7 +151,7 @@ resource "aws_lb_listener" "pmm_https" {
   port              = "443"
   protocol          = "HTTPS"
   ssl_policy        = var.ssl_policy
-  certificate_arn   = var.certificate_arn
+  certificate_arn   = aws_acm_certificate.pmm.arn
 
   default_action {
     type             = "forward"
@@ -167,6 +164,10 @@ resource "aws_lb_listener" "pmm_https" {
       Name = "${local.service_name}-https-listener"
     }
   )
+
+  depends_on = [
+    aws_acm_certificate_validation.pmm
+  ]
 }
 
 # Additional SSL certificates (optional)
@@ -179,6 +180,7 @@ resource "aws_lb_listener_certificate" "pmm" {
 
 # Route53 A record for ALB
 resource "aws_route53_record" "pmm" {
+  provider = aws.dns
   for_each = toset(var.dns_names)
 
   zone_id = var.zone_id
@@ -209,7 +211,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
     TargetGroup  = aws_lb_target_group.pmm.arn_suffix
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,
@@ -235,7 +237,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_target_response_time" {
     LoadBalancer = aws_lb.pmm.arn_suffix
   }
 
-  alarm_actions = var.alarm_actions
+  alarm_actions = local.all_alarm_targets
 
   tags = merge(
     local.common_tags,

@@ -49,11 +49,11 @@ def postgres_pmm(request, service_network, keep_after, aws_region, test_role_arn
     yield postgres
 
 
-def configure_postgres_via_ssm(asg_name, aws_region, test_role_arn, db_host, db_port, db_name, db_user, db_password):
+def configure_postgres_via_ssm(instance_id, aws_region, test_role_arn, db_host, db_port, db_name, db_user, db_password):
     """
     Configure PostgreSQL for PMM using SSM commands executed on an EC2 instance in the VPC.
 
-    :param asg_name: Name of the Auto Scaling Group with PMM instances
+    :param instance_id: EC2 instance ID of the PMM server
     :param aws_region: AWS region
     :param test_role_arn: IAM role ARN to assume (optional)
     :param db_host: PostgreSQL hostname
@@ -62,20 +62,14 @@ def configure_postgres_via_ssm(asg_name, aws_region, test_role_arn, db_host, db_
     :param db_user: PostgreSQL username
     :param db_password: PostgreSQL password
     """
+    from infrahouse_core.aws.ec2_instance import EC2Instance
+
     LOG.info("=" * 80)
     LOG.info("Configuring PostgreSQL via SSM from PMM EC2 instance")
     LOG.info("=" * 80)
 
-    # Create ASG instance to access EC2 instances
-    asg = ASG(asg_name=asg_name, region=aws_region, role_arn=test_role_arn)
-
-    # Get instances from ASG
-    instances = asg.instances
-    if not instances:
-        raise Exception(f"No instances found in ASG: {asg_name}")
-
-    # Pick the first instance
-    instance = instances[0]
+    # Create EC2Instance to access the PMM instance
+    instance = EC2Instance(instance_id=instance_id, region=aws_region, role_arn=test_role_arn)
     LOG.info("Using EC2 instance: %s", instance.instance_id)
 
     # Install python3-psycopg2 via apt (Ubuntu Noble uses PEP 668)

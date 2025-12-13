@@ -33,3 +33,38 @@ pg_activity:
     - blocked:
         usage: "GAUGE"
         description: "Number of blocked processes (per database, state)"
+
+pg_stat_user_indexes:
+  query: |
+    SELECT current_database() as datname, a.schemaname, a.relname as tablename, a.indexrelname as indexname, a.idx_scan, a.idx_tup_read, a.idx_tup_fetch
+    , b.idx_blks_read, b.idx_blks_hit
+    FROM pg_stat_user_indexes as a LEFT JOIN pg_statio_user_indexes as b ON b.indexrelid = a.indexrelid
+  master: false
+  metrics:
+    - datname:
+        usage: "LABEL"
+        description: "Name of the database"
+    - schemaname:
+        usage: "LABEL"
+        description: "Name of the schema this index is in"
+    - tablename:
+        usage: "LABEL"
+        description: "Name of the table for this index"
+    - indexname:
+        usage: "LABEL"
+        description: "Name of this index"
+    - idx_scan:
+        usage: "GAUGE"
+        description: "Number of index scans initiated on this index"
+    - idx_tup_read:
+        usage: "GAUGE"
+        description: "Number of index entries returned by scans on this index"
+    - idx_tup_fetch:
+        usage: "GAUGE"
+        description: "Number of live table rows fetched by simple index scans using this index"
+    - idx_blks_read:
+        usage: "COUNTER"
+        description: "Blocks read from disk for this index"
+    - idx_blks_hit:
+        usage: "COUNTER"
+        description: "Blocks found in buffer cache for this index"

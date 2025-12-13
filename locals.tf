@@ -73,4 +73,9 @@ locals {
       "-v /opt/pmm/custom-queries/postgresql-low-resolution.yml:/usr/local/percona/pmm/collectors/custom-queries/postgresql/low-resolution/custom-queries.yml:ro"
     ] : []
   ))
+
+  # Device names for CloudWatch metrics
+  # All supported instance types (t3, m5, m6i, c5, c6i) use NVMe, so devices appear as nvme*
+  root_device_name = "nvme0n1p1"  # Root volume partition on NVMe instance types
+  data_device_name = "nvme1n1"    # Data EBS volume on NVMe instance types
 }

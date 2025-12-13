@@ -26,16 +26,6 @@ data "cloudinit_config" "pmm_persistent" {
         "#cloud-config",
         yamlencode(
           {
-            package_update : true
-            packages : [
-              "docker-ce",
-              "docker-ce-cli",
-              "containerd.io",
-              "docker-buildx-plugin",
-              "docker-compose-plugin",
-              "awscli",
-              "amazon-cloudwatch-agent"  # For detailed monitoring
-            ]
             write_files : concat(
               [
                 {
@@ -58,6 +48,7 @@ data "cloudinit_config" "pmm_persistent" {
                     docker_image               = local.docker_image
                     disable_telemetry          = var.disable_telemetry
                     custom_query_volume_mounts = local.custom_query_volume_mounts
+                    pmm_public_address         = "${var.dns_names[0]}.${data.aws_route53_zone.selected.name}"
                   })
                 },
                 {
@@ -69,6 +60,10 @@ data "cloudinit_config" "pmm_persistent" {
                   path : "/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
                   permissions : "0644"
                   content : jsonencode({
+                    agent : {
+                      metrics_collection_interval : 60
+                      run_as_user : "root"
+                    }
                     metrics : {
                       namespace : "CWAgent"
                       metrics_collected : {
@@ -76,37 +71,46 @@ data "cloudinit_config" "pmm_persistent" {
                           measurement : [
                             {
                               name : "cpu_usage_idle"
-                              rename : "CPU_IDLE"
                               unit : "Percent"
                             },
-                            "cpu_usage_iowait"
+                            {
+                              name : "cpu_usage_iowait"
+                              unit : "Percent"
+                            }
                           ]
                           metrics_collection_interval : 60
+                          totalcpu : false
                         }
                         disk : {
                           measurement : [
                             {
                               name : "used_percent"
-                              rename : "DISK_USED_PERCENT"
                               unit : "Percent"
                             }
                           ]
                           metrics_collection_interval : 60
                           resources : [
                             "/",
-                            "/srv"
+                            "/srv",
+                          ]
+                          ignore_file_system_types : [
+                            "sysfs",
+                            "devtmpfs",
+                            "tmpfs",
                           ]
                         }
                         mem : {
                           measurement : [
                             {
                               name : "mem_used_percent"
-                              rename : "MEM_USED_PERCENT"
                               unit : "Percent"
                             }
                           ]
                           metrics_collection_interval : 60
                         }
+                      }
+                      append_dimensions : {
+                        InstanceId : "$${aws:InstanceId}"
                       }
                     }
                   })

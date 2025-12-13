@@ -26,4 +26,15 @@ echo "deb [signed-by=/etc/apt/keyrings/infrahouse.gpg] https://release-${ubuntu_
 # Update package lists
 apt-get update
 
-echo "Docker repository setup completed"
+# Install Docker and other packages
+echo "Installing Docker packages..."
+apt-get install -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin \
+  awscli \
+  amazon-cloudwatch-agent
+
+echo "Docker and dependencies installed successfully"

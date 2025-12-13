@@ -9,9 +9,73 @@ from textwrap import dedent
 
 import pytest
 import requests
+from infrahouse_core.timeout import timeout
 from pytest_infrahouse import terraform_apply
 
-from tests.conftest import TERRAFORM_ROOT_DIR, LOG, configure_postgres_via_ssm, wait_for_instance_refresh
+from tests.conftest import TERRAFORM_ROOT_DIR, LOG, configure_postgres_via_ssm
+
+
+def validate_backup_creation(boto3_session, aws_region, vault_name, volume_id, backup_role_arn):
+    """
+    Trigger and validate an on-demand backup of the EBS volume.
+
+    :param boto3_session: Boto3 session for AWS API calls
+    :param aws_region: AWS region
+    :param vault_name: AWS Backup vault name
+    :param volume_id: EBS volume ID to backup
+    :param backup_role_arn: IAM role ARN for AWS Backup
+    :raises: pytest.fail if backup fails or times out
+    """
+
+    LOG.info("=" * 80)
+    LOG.info("Testing AWS Backup")
+    LOG.info("=" * 80)
+    LOG.info("Backup vault: %s", vault_name)
+    LOG.info("EBS volume: %s", volume_id)
+
+    # Create backup client
+    backup_client = boto3_session.client('backup', region_name=aws_region)
+
+    # Get account ID for ARN
+    sts_client = boto3_session.client('sts', region_name=aws_region)
+    account_id = sts_client.get_caller_identity()["Account"]
+
+    # Start on-demand backup
+    LOG.info("Starting on-demand backup of volume %s", volume_id)
+    response = backup_client.start_backup_job(
+        BackupVaultName=vault_name,
+        ResourceArn=f"arn:aws:ec2:{aws_region}:{account_id}:volume/{volume_id}",
+        IamRoleArn=backup_role_arn,
+        RecoveryPointTags={
+            'test': 'automated',
+            'created_by': 'pytest'
+        }
+    )
+
+    backup_job_id = response['BackupJobId']
+    LOG.info("Backup job started: %s", backup_job_id)
+
+    # Wait for backup to complete (with timeout)
+    try:
+        with timeout(seconds=600):  # 10 minutes
+            while True:
+                job = backup_client.describe_backup_job(BackupJobId=backup_job_id)
+                status = job['State']
+
+                LOG.info("Backup job status: %s", status)
+
+                if status == 'COMPLETED':
+                    recovery_point_arn = job['RecoveryPointArn']
+                    LOG.info("✓ Backup completed successfully!")
+                    LOG.info("Recovery point: %s", recovery_point_arn)
+                    return
+                elif status in ['FAILED', 'ABORTED', 'EXPIRED']:
+                    LOG.error("Backup job details: %s", json.dumps(job, indent=2, default=str))
+                    pytest.fail(f"Backup job failed with status: {status}")
+
+                time.sleep(30)
+    except TimeoutError:
+        pytest.fail("Backup did not complete within 10 minutes")
 
 
 def get_pmm_auth_header(username, password):
@@ -201,6 +265,7 @@ def test_module(
     aws_region,
     subzone,
     postgres_pmm,
+    boto3_session,
 ):
     """
     Test basic PMM server deployment.
@@ -326,27 +391,35 @@ def test_module(
         # Log PMM access information for testing
         pmm_url = tf_output["pmm_url"]["value"]
         admin_password = tf_output["admin_password"]["value"]
-        asg_name = tf_output["asg_name"]["value"]
+        instance_id = tf_output["instance_id"]["value"]
         LOG.info("PMM URL: %s", pmm_url)
         LOG.info("PMM admin password: %s", admin_password)
-        LOG.info("PMM ASG name: %s", asg_name)
+        LOG.info("PMM EC2 instance ID: %s", instance_id)
 
-        # Wait for any in-progress instance refreshes to complete
-        wait_for_instance_refresh(
-            asg_name=asg_name,
-            aws_region=aws_region,
-            test_role_arn=test_role_arn,
-            timeout=600
-        )
-
-        # Wait a bit for PMM to be fully ready
+        # Wait for PMM to be fully ready
         LOG.info("Waiting for PMM to be fully ready...")
-        time.sleep(30)
+        wait_interval = 10
+
+        try:
+            with timeout(seconds=300):  # 5 minutes
+                while True:
+                    try:
+                        response = requests.get(f"{pmm_url}/v1/readyz", timeout=10, verify=True)
+                        if response.status_code == 200:
+                            LOG.info("PMM readiness endpoint is responding")
+                            break
+                    except Exception as e:
+                        LOG.debug("PMM /v1/readyz not ready yet: %s", e)
+
+                    time.sleep(wait_interval)
+                    LOG.info("Still waiting for PMM...")
+        except TimeoutError:
+            pytest.fail(f"PMM did not become ready within 300 seconds. URL: {pmm_url}")
 
         # Configure PostgreSQL for PMM monitoring via SSM
         LOG.info("Configuring PostgreSQL for PMM monitoring...")
         configure_postgres_via_ssm(
-            asg_name=asg_name,
+            instance_id=instance_id,
             aws_region=aws_region,
             test_role_arn=test_role_arn,
             db_host=tf_output["postgres_address"]["value"],
@@ -377,20 +450,17 @@ def test_module(
         # Prepare PMM API authentication
         auth_header = get_pmm_auth_header("admin", admin_password)
 
-        # Try to access swagger/API documentation
-        LOG.info("Checking PMM API availability...")
-        try:
-            swagger_response = requests.get(
-                f"{pmm_url}/swagger/",
-                auth=("admin", admin_password),
-                timeout=10,
-                allow_redirects=False
-            )
-            LOG.info("Swagger UI status: %d", swagger_response.status_code)
-            if swagger_response.status_code in (200, 301, 302):
-                LOG.info("Swagger UI is available at %s/swagger/", pmm_url)
-        except Exception as e:
-            LOG.warning("Could not access Swagger UI: %s", e)
+        # Check Swagger UI is accessible
+        LOG.info("Checking PMM Swagger UI accessibility...")
+        swagger_response = requests.get(
+            f"{pmm_url}/swagger/",
+            auth=("admin", admin_password),
+            timeout=10,
+            allow_redirects=False
+        )
+        LOG.info("Swagger UI status: %d", swagger_response.status_code)
+        if swagger_response.status_code in (200, 301, 302):
+            LOG.info("Swagger UI is available at %s/swagger/", pmm_url)
 
         # Check if PostgreSQL is already monitored
         LOG.info("Checking if PostgreSQL is already monitored in PMM...")
@@ -456,37 +526,44 @@ def test_module(
         else:
             LOG.warning("Could not retrieve services list via API")
 
-        # Provide manual instructions if API didn't work
-        if not api_integration_successful:
-            LOG.info("")
-            LOG.info("=" * 80)
-            LOG.info("MANUAL POSTGRESQL SETUP REQUIRED")
-            LOG.info("=" * 80)
-            LOG.info("To add PostgreSQL monitoring manually:")
-            LOG.info("")
-            LOG.info("1. Open PMM UI: %s", pmm_url)
-            LOG.info("   Username: admin")
-            LOG.info("   Password: %s", admin_password)
-            LOG.info("")
-            LOG.info("2. Navigate to: Configuration → PMM Inventory → Add Instance")
-            LOG.info("")
-            LOG.info("3. Select 'PostgreSQL' and 'Add a remote instance'")
-            LOG.info("")
-            LOG.info("4. Enter connection details:")
-            LOG.info("   Hostname: %s", postgres_address)
-            LOG.info("   Port: %s", postgres_port)
-            LOG.info("   Database: %s", postgres_database)
-            LOG.info("   Username: %s", postgres_username)
-            LOG.info("   Password: %s", postgres_password)
-            LOG.info("")
-            LOG.info("5. Click 'Add service'")
-            LOG.info("=" * 80)
-            LOG.info("")
-
         LOG.info("=" * 80)
         LOG.info("PostgreSQL monitoring test completed")
-        if api_integration_successful:
-            LOG.info("Status: PostgreSQL automatically added to PMM ✓")
-        else:
-            LOG.info("Status: Manual setup required (see instructions above)")
         LOG.info("=" * 80)
+
+        # Test AWS Backup functionality
+        LOG.info("Testing AWS Backup...")
+        vault_name = tf_output["backup_vault_name"]["value"]
+        volume_id = tf_output["ebs_volume_id"]["value"]
+        backup_role_arn = tf_output["backup_role_arn"]["value"]
+
+        validate_backup_creation(
+            boto3_session=boto3_session,
+            aws_region=aws_region,
+            vault_name=vault_name,
+            volume_id=volume_id,
+            backup_role_arn=backup_role_arn
+        )
+
+        if api_integration_successful:
+            LOG.info("Status: PostgreSQL successfully added to PMM ✓")
+        else:
+            LOG.error("FAILED: Could not add PostgreSQL instance to PMM")
+            LOG.info("")
+            LOG.info("For manual verification/debugging:")
+            LOG.info("  PMM URL: %s", pmm_url)
+            LOG.info("  Username: admin")
+            LOG.info("  Password: %s", admin_password)
+            LOG.info("")
+            LOG.info("PostgreSQL connection details:")
+            LOG.info("  Hostname: %s", postgres_address)
+            LOG.info("  Port: %s", postgres_port)
+            LOG.info("  Database: %s", postgres_database)
+            LOG.info("  Username: %s", postgres_username)
+            LOG.info("  Password: %s", postgres_password)
+            LOG.info("")
+
+            # Fail the test
+            pytest.fail(
+                "Failed to add PostgreSQL instance to PMM monitoring. "
+                "Check logs above for PMM URL and credentials to debug manually."
+            )
