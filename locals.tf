@@ -75,7 +75,12 @@ locals {
   ))
 
   # Device names for CloudWatch metrics
-  # All supported instance types (t3, m5, m6i, c5, c6i) use NVMe, so devices appear as nvme*
+  # All supported instance types (t3, m5, m6i, c5, c6i, r5, r6i) use NVMe, so devices appear as nvme*
+  # These names are used by CloudWatch Agent for disk metrics
+  # Note: mount-ebs-volume.sh has defensive fallback to /dev/xvdf, but these instance types use NVMe
   root_device_name = "nvme0n1p1"  # Root volume partition on NVMe instance types
   data_device_name = "nvme1n1"    # Data EBS volume on NVMe instance types
+
+  # ALB allowed CIDR blocks - defaults to VPC CIDR for security
+  allowed_cidr = var.allowed_cidr != null ? var.allowed_cidr : [data.aws_vpc.selected.cidr_block]
 }

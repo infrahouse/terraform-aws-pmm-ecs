@@ -20,7 +20,7 @@ resource "aws_security_group_rule" "pmm_alb_https_ingress" {
   from_port         = 443
   to_port           = 443
   protocol          = "tcp"
-  cidr_blocks       = var.allowed_cidr
+  cidr_blocks       = local.allowed_cidr
   security_group_id = aws_security_group.pmm_alb.id
   description       = "Allow HTTPS from allowed CIDRs"
 }
@@ -31,7 +31,7 @@ resource "aws_security_group_rule" "pmm_alb_http_ingress" {
   from_port         = 80
   to_port           = 80
   protocol          = "tcp"
-  cidr_blocks       = var.allowed_cidr
+  cidr_blocks       = local.allowed_cidr
   security_group_id = aws_security_group.pmm_alb.id
   description       = "Allow HTTP from allowed CIDRs (for redirect)"
 }
@@ -94,7 +94,7 @@ resource "aws_lb_target_group" "pmm" {
     protocol            = "HTTP"
   }
 
-  deregistration_delay = 30
+  deregistration_delay = 60  # Allow in-flight requests to complete during deployments
 
   stickiness {
     type            = "lb_cookie"

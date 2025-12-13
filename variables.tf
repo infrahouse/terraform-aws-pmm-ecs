@@ -101,23 +101,16 @@ variable "instance_type" {
   }
 }
 
-variable "container_cpu" {
-  description = "CPU units for PMM container"
-  type        = number
-  default     = 512
-}
-
-variable "container_memory" {
-  description = "Memory (MB) for PMM container"
-  type        = number
-  default     = 4096
-}
-
 # EBS Volume Configuration
 variable "ebs_volume_size" {
   description = "Size of the EBS data volume in GB"
   type        = number
   default     = 100
+
+  validation {
+    condition     = var.ebs_volume_size >= 1 && var.ebs_volume_size <= 16384
+    error_message = "EBS volume size must be between 1 and 16384 GB"
+  }
 }
 
 variable "ebs_volume_type" {
@@ -139,6 +132,11 @@ variable "ebs_iops" {
   EOF
   type        = number
   default     = 3000
+
+  validation {
+    condition     = var.ebs_iops >= 100 && var.ebs_iops <= 64000
+    error_message = "IOPS must be between 100 and 64000"
+  }
 }
 
 variable "ebs_throughput" {
@@ -147,17 +145,31 @@ variable "ebs_throughput" {
   EOF
   type        = number
   default     = 125
+
+  validation {
+    condition     = var.ebs_throughput >= 125 && var.ebs_throughput <= 1000
+    error_message = "Throughput must be between 125 and 1000 MB/s"
+  }
 }
 
 variable "root_volume_size" {
   description = "Size of the root volume in GB"
   type        = number
   default     = 20
+
+  validation {
+    condition     = var.root_volume_size >= 8
+    error_message = "Root volume must be at least 8 GB for Ubuntu"
+  }
 }
 
 variable "kms_key_id" {
   description = <<-EOF
-    KMS key ID for EBS encryption. If null, uses AWS-managed key
+    KMS key ID or ARN for EBS volume encryption.
+    Accepts both formats:
+    - Key ID: "1234abcd-12ab-34cd-56ef-1234567890ab"
+    - Key ARN: "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+    If null, uses AWS-managed key.
   EOF
   type        = string
   default     = null
@@ -280,6 +292,11 @@ variable "backup_retention_days" {
   description = "Days to retain daily backups"
   type        = number
   default     = 30
+
+  validation {
+    condition     = var.backup_retention_days >= 1 && var.backup_retention_days <= 35040
+    error_message = "Backup retention must be between 1 and 35040 days (AWS Backup limit)"
+  }
 }
 
 variable "backup_vault_force_destroy" {
@@ -292,7 +309,9 @@ variable "backup_vault_force_destroy" {
 
 variable "backup_kms_key_id" {
   description = <<-EOF
-    KMS key ARN for backup vault encryption. If null, uses AWS-managed key
+    KMS key ARN (not ID) for backup vault encryption.
+    Must be full ARN format: "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+    If null, uses AWS-managed key.
   EOF
   type        = string
   default     = null
@@ -300,18 +319,24 @@ variable "backup_kms_key_id" {
 
 variable "enable_weekly_backup" {
   description = <<-EOF
-    Enable weekly backups with longer retention
+    Enable weekly backups with longer retention.
+    Recommended for production: Provides 1-year backup coverage (30 daily + 52 weekly).
   EOF
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "weekly_backup_retention_days" {
   description = <<-EOF
-    Days to retain weekly backups
+    Days to retain weekly backups (365 days = 52 weeks ~1 year of coverage)
   EOF
   type        = number
-  default     = 90
+  default     = 365
+
+  validation {
+    condition     = var.weekly_backup_retention_days >= 1 && var.weekly_backup_retention_days <= 35040
+    error_message = "Weekly backup retention must be between 1 and 35040 days (AWS Backup limit)"
+  }
 }
 
 variable "backup_root_volume" {
@@ -330,45 +355,34 @@ variable "enable_backup_alarms" {
   default     = true
 }
 
-# Monitoring configuration
-variable "cloudwatch_log_retention_days" {
-  description = "CloudWatch log retention in days"
-  type        = number
-  default     = 365
-}
-
-# Health check configuration
-variable "healthcheck_interval" {
-  description = "Health check interval in seconds"
-  type        = number
-  default     = 30
-}
-
-variable "healthcheck_timeout" {
-  description = "Health check timeout in seconds"
-  type        = number
-  default     = 5
-}
-
 # SSH access
 variable "ssh_key_name" {
-  description = "SSH key name for EC2 instances"
+  description = <<-EOF
+    EC2 key pair name for SSH access to PMM instance (optional).
+    If not provided, use AWS Systems Manager Session Manager for instance access.
+    Requires admin_cidr_block to be set for security group rules.
+  EOF
   type        = string
   default     = null
-}
 
-variable "admin_cidr_block" {
-  description = "CIDR block for admin SSH access"
-  type        = string
-  default     = null
+  validation {
+    condition     = var.ssh_key_name == null || length(var.ssh_key_name) > 0
+    error_message = "SSH key name must be a non-empty string if provided"
+  }
 }
 
 variable "allowed_cidr" {
   description = <<-EOF
-    List of CIDR blocks allowed to access the PMM ALB
+    List of CIDR blocks allowed to access the PMM ALB.
+    Defaults to VPC CIDR block (restricts access to VPC only).
+
+    For tighter security, specify your VPN or office IP ranges:
+    - VPN access: ["10.0.0.0/8"]
+    - Office IP: ["203.0.113.0/24"]
+    - Multiple ranges: ["10.0.0.0/8", "172.16.0.0/12"]
   EOF
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = null
 }
 
 # Security
