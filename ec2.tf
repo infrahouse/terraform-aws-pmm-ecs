@@ -4,7 +4,7 @@ resource "aws_instance" "pmm_server" {
   instance_type          = var.instance_type
   subnet_id              = var.private_subnet_ids[0]
   vpc_security_group_ids = [aws_security_group.pmm_instance.id]
-  key_name              = var.ssh_key_name
+  key_name               = var.ssh_key_name
   iam_instance_profile   = aws_iam_instance_profile.pmm.name
 
   # Enable detailed monitoring for auto-recovery
@@ -13,9 +13,9 @@ resource "aws_instance" "pmm_server" {
   # Root volume configuration
   root_block_device {
     volume_size           = var.root_volume_size
-    volume_type          = "gp3"
-    encrypted            = true
-    kms_key_id           = var.kms_key_id
+    volume_type           = "gp3"
+    encrypted             = true
+    kms_key_id            = var.kms_key_id
     delete_on_termination = true
 
     tags = merge(
@@ -50,7 +50,7 @@ resource "aws_instance" "pmm_server" {
 
   # Lifecycle management
   lifecycle {
-    ignore_changes = [ami]  # Ignore AMI updates unless explicitly changed
+    ignore_changes = [ami] # Ignore AMI updates unless explicitly changed
   }
 }
 

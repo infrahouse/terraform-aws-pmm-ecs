@@ -219,7 +219,7 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
       {
         type = "metric"
         properties = {
-          title   = "EC2 Instance Status"
+          title = "EC2 Instance Status"
           metrics = [
             ["AWS/EC2", "StatusCheckFailed", "InstanceId", aws_instance.pmm_server.id, { stat = "Maximum", label = "Total Failures" }],
             ["AWS/EC2", "StatusCheckFailed_System", "InstanceId", aws_instance.pmm_server.id, { stat = "Maximum", label = "System Failures" }],
@@ -234,7 +234,7 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
       {
         type = "metric"
         properties = {
-          title   = "CPU and Memory Utilization"
+          title = "CPU and Memory Utilization"
           metrics = [
             ["AWS/EC2", "CPUUtilization", "InstanceId", aws_instance.pmm_server.id, { stat = "Average", label = "CPU %" }],
             ["CWAgent", "mem_used_percent", ".", ".", { stat = "Average", label = "Memory %" }]
@@ -248,7 +248,7 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
       {
         type = "metric"
         properties = {
-          title   = "Disk Usage"
+          title = "Disk Usage"
           metrics = [
             ["CWAgent", "disk_used_percent", "device", local.root_device_name, "fstype", "ext4", "path", "/", "InstanceId", aws_instance.pmm_server.id, { stat = "Average", label = "Root Volume" }],
             ["CWAgent", "disk_used_percent", "device", local.data_device_name, "fstype", "ext4", "path", "/srv", "InstanceId", aws_instance.pmm_server.id, { stat = "Average", label = "Data Volume" }]
@@ -262,7 +262,7 @@ resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
       {
         type = "metric"
         properties = {
-          title   = "EBS Volume Performance"
+          title = "EBS Volume Performance"
           metrics = [
             ["AWS/EBS", "VolumeReadOps", "VolumeId", aws_ebs_volume.pmm_data.id, { stat = "Sum", label = "Read Ops" }],
             [".", "VolumeWriteOps", ".", ".", { stat = "Sum", label = "Write Ops" }],
