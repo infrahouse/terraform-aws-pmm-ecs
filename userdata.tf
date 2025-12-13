@@ -6,7 +6,7 @@ data "cloudinit_config" "pmm_persistent" {
   # Part 1: Bash script to handle EBS volume mounting
   part {
     content_type = "text/x-shellscript"
-    content      = file("${path.module}/scripts/mount-ebs-volume.sh")
+    content      = templatefile("${path.module}/scripts/mount-ebs-volume.sh", {})
   }
 
   # Part 2: Install Docker and repositories
@@ -127,6 +127,6 @@ data "cloudinit_config" "pmm_persistent" {
   # Part 4: Start all services
   part {
     content_type = "text/x-shellscript"
-    content      = file("${path.module}/templates/start-services.sh.tftpl")
+    content      = templatefile("${path.module}/templates/start-services.sh.tftpl", {})
   }
 }

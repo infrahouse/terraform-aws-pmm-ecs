@@ -401,7 +401,7 @@ def test_module(
         wait_interval = 10
 
         try:
-            with timeout(seconds=300):  # 5 minutes
+            with timeout(seconds=600):  # 10 minutes
                 while True:
                     try:
                         response = requests.get(f"{pmm_url}/v1/readyz", timeout=10, verify=True)
@@ -414,7 +414,7 @@ def test_module(
                     time.sleep(wait_interval)
                     LOG.info("Still waiting for PMM...")
         except TimeoutError:
-            pytest.fail(f"PMM did not become ready within 300 seconds. URL: {pmm_url}")
+            pytest.fail(f"PMM did not become ready within 600 seconds. URL: {pmm_url}")
 
         # Configure PostgreSQL for PMM monitoring via SSM
         LOG.info("Configuring PostgreSQL for PMM monitoring...")

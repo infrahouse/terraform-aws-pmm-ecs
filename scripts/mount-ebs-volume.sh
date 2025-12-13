@@ -7,7 +7,7 @@ echo "Starting EBS volume setup..."
 # This module only supports NVMe-based instance types (t3, m5, m6i, c5, c6i, r5, r6i)
 # On NVMe instances, EBS volumes appear as /dev/nvme[1-26]n1
 # Legacy fallback to /dev/xvdf is kept for defensive programming
-MAX_ATTEMPTS=180  # 15 minutes (180 attempts × 5 seconds) to handle AWS API delays
+MAX_ATTEMPTS=180  # 15 minutes (180 attempts x 5 seconds) to handle AWS API delays
 ATTEMPT=0
 
 DEVICE=""
