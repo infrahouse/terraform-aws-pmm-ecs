@@ -10,7 +10,8 @@ module "pmm" {
   dns_names = ["pmm"]
 
   # Required variables
-  environment = var.environment
+  environment  = var.environment
+  alarm_emails = ["devops@example.com"]
 
   tags = {
     environment = var.environment

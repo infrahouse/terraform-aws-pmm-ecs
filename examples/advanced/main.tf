@@ -10,23 +10,29 @@ module "pmm" {
   dns_names = ["pmm"]
 
   # Required variables
-  environment = var.environment
+  environment  = var.environment
+  alarm_emails = ["devops@example.com", "oncall@example.com"]
 
-  # Custom EFS encryption with customer-managed KMS key
-  efs_kms_key_id = aws_kms_key.efs.id
+  # Custom EBS encryption with customer-managed KMS key
+  kms_key_id = aws_kms_key.ebs.id
+
+  # Custom EBS volume configuration for high workload
+  ebs_volume_size = 200
+  ebs_iops        = 5000
+  ebs_throughput  = 250
 
   # Custom retention periods
-  backup_retention_days         = 90
-  cloudwatch_log_retention_days = 90
+  backup_retention_days        = 90
+  weekly_backup_retention_days = 730 # 2 years
 
-  # Custom compute resources
-  instance_type    = "m5.xlarge"
-  container_cpu    = 4096
-  container_memory = 8192
+  # Larger instance for high-volume monitoring
+  instance_type = "m5.xlarge"
 
-  # SSH access to EC2 instances
-  ssh_key_name      = var.ssh_key_name
-  admin_cidr_blocks = var.admin_cidr_blocks
+  # SSH access to EC2 instance
+  ssh_key_name = var.ssh_key_name
+
+  # Restrict ALB access to VPN/office network
+  allowed_cidr = ["10.0.0.0/8"] # Example: VPN CIDR
 
   # Enable PMM telemetry
   disable_telemetry = false
@@ -38,19 +44,19 @@ module "pmm" {
   }
 }
 
-# Customer-managed KMS key for EFS encryption
-resource "aws_kms_key" "efs" {
-  description             = "PMM EFS encryption key"
+# Customer-managed KMS key for EBS encryption
+resource "aws_kms_key" "ebs" {
+  description             = "PMM EBS encryption key"
   deletion_window_in_days = 30
   enable_key_rotation     = true
 
   tags = {
-    Name        = "pmm-efs-key"
+    Name        = "pmm-ebs-key"
     Environment = var.environment
   }
 }
 
-resource "aws_kms_alias" "efs" {
-  name          = "alias/pmm-efs"
-  target_key_id = aws_kms_key.efs.key_id
+resource "aws_kms_alias" "ebs" {
+  name          = "alias/pmm-ebs"
+  target_key_id = aws_kms_key.ebs.key_id
 }

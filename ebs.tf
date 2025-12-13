@@ -21,9 +21,12 @@ resource "aws_ebs_volume" "pmm_data" {
     }
   )
 
-  # Prevent accidental deletion of data volume
+  # Note: prevent_destroy is set to false to allow CI/CD test cleanup.
+  # Data protection is provided by AWS Backup with daily snapshots (30-day retention).
+  # For production deployments, rely on backup/restore procedures rather than lifecycle rules.
+  # See docs/BACKUP_RESTORE.md for recovery procedures.
   lifecycle {
-    prevent_destroy = false  # Set to true in production
+    prevent_destroy = false
   }
 }
 

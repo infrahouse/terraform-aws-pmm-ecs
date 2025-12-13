@@ -10,7 +10,8 @@ module "pmm" {
   dns_names = ["pmm"]
 
   # Required variables
-  environment = var.environment
+  environment  = var.environment
+  alarm_emails = ["database-team@example.com"]
 
   # RDS monitoring configuration
   # PMM will be granted access to these RDS security groups on port 5432

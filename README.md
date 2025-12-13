@@ -369,6 +369,87 @@ For complete query format documentation, see [Percona PMM Documentation](https:/
 - **CloudWatch**: Dashboard with instance metrics + alarms for EC2, ALB, memory, disk, and EBS burst balance
 - **CloudWatch Agent**: Collects memory and disk usage metrics from the instance
 
+## Performance Sizing
+
+PMM performance depends on workload (number of monitored databases, metrics retention, query analytics load). This guide helps you choose appropriate instance types and EBS performance settings.
+
+### Instance Sizing
+
+| Instance Type | Monitored Databases | Metrics Retention | Memory | vCPUs |
+|---------------|---------------------|-------------------|--------|-------|
+| **m5.large** (default) | 1-10 databases | 7-30 days | 8 GB | 2 |
+| **m5.xlarge** | 10-20 databases | 30-90 days | 16 GB | 4 |
+| **m5.2xlarge** | 20-50 databases | 90+ days | 32 GB | 8 |
+
+**Note:** Actual requirements depend on metrics frequency, query analytics load, and custom queries.
+
+### EBS Volume Performance
+
+Default settings (100GB, 3000 IOPS, 125 MB/s throughput) are suitable for:
+- 1-5 monitored databases
+- 7-day metrics retention
+- Light query analytics load
+- Cost-effective baseline ($10-15/month for storage)
+
+**Increase performance for higher workloads:**
+
+| Workload | Volume Size | IOPS | Throughput | Use Case |
+|----------|-------------|------|------------|----------|
+| **Baseline** (default) | 100 GB | 3000 | 125 MB/s | 1-5 databases, 7-day retention |
+| **Medium** | 200 GB | 5000 | 250 MB/s | 10-20 databases, 30-day retention |
+| **Heavy** | 500 GB | 8000 | 500 MB/s | 20+ databases, 90+ day retention |
+| **High Performance** | 500+ GB | io2 volume | — | Heavy query analytics, 50+ databases |
+
+**Example configurations:**
+
+```hcl
+# Medium workload (10-20 databases, 30-day retention)
+module "pmm" {
+  source = "infrahouse/pmm-ecs/aws"
+
+  instance_type       = "m5.xlarge"
+  ebs_volume_size     = 200
+  ebs_iops            = 5000
+  ebs_throughput      = 250
+
+  # ... other configuration ...
+}
+
+# Heavy workload (20+ databases, 90-day retention)
+module "pmm" {
+  source = "infrahouse/pmm-ecs/aws"
+
+  instance_type       = "m5.2xlarge"
+  ebs_volume_size     = 500
+  ebs_iops            = 8000
+  ebs_throughput      = 500
+
+  # ... other configuration ...
+}
+
+# High-performance workload (50+ databases, heavy analytics)
+module "pmm" {
+  source = "infrahouse/pmm-ecs/aws"
+
+  instance_type       = "m5.2xlarge"
+  ebs_volume_size     = 1000
+  ebs_volume_type     = "io2"
+  ebs_iops            = 16000
+
+  # ... other configuration ...
+}
+```
+
+### Monitoring EBS Performance
+
+Watch for these CloudWatch metrics to determine if you need to increase IOPS/throughput:
+
+- **EBS Burst Balance** (gp2 only): Alarm fires when < 20% (indicates sustained IOPS demand)
+- **VolumeReadOps/VolumeWriteOps**: High values approaching IOPS limits
+- **PMM Query Response Time**: Slow dashboard loads may indicate I/O bottleneck
+
+Check CloudWatch Dashboard (created automatically by this module) for real-time performance metrics.
+
 ## Examples
 
 ### Basic Deployment
