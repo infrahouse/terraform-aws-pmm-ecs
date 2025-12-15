@@ -12,8 +12,8 @@ resource "aws_cloudwatch_metric_alarm" "pmm_system_auto_recovery" {
   statistic           = "Maximum"
   period              = 60
   evaluation_periods  = 2
-  threshold           = 1
-  comparison_operator = "GreaterThanThreshold"
+  threshold           = 0.5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
 
   dimensions = {
     InstanceId = aws_instance.pmm_server.id
@@ -31,30 +31,36 @@ resource "aws_cloudwatch_metric_alarm" "pmm_system_auto_recovery" {
   )
 }
 
-# Instance status check alarm - alerts but doesn't auto-recover
+# Instance status check alarm - auto-reboots on failure
+# Handles software-level issues: OOM, kernel panics, corrupted state
 resource "aws_cloudwatch_metric_alarm" "pmm_instance_check" {
   alarm_name          = "${local.service_name}-instance-status-check"
-  alarm_description   = "Alert when PMM instance fails status checks (software/network issues)"
+  alarm_description   = "Auto-reboot PMM instance when it fails status checks (OOM, kernel panic, software issues)"
   namespace           = "AWS/EC2"
   metric_name         = "StatusCheckFailed_Instance"
   statistic           = "Maximum"
   period              = 60
-  evaluation_periods  = 3
-  threshold           = 1
-  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3 # Wait 3 minutes before rebooting (vs 2 for system checks)
+  threshold           = 0.5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
 
   dimensions = {
     InstanceId = aws_instance.pmm_server.id
   }
 
-  # Send notifications but don't auto-recover (instance issues often need investigation)
-  alarm_actions = local.all_alarm_targets
+  # Auto-reboot on instance failures + send notifications
+  # Reboot clears: OOM state, memory leaks, kernel panics, corrupted buffers
+  # PMM data persists on EBS volume, so reboot is safe
+  alarm_actions = concat(
+    ["arn:aws:automate:${data.aws_region.current.name}:ec2:reboot"],
+    local.all_alarm_targets
+  )
 
   tags = merge(
     local.common_tags,
     {
       Name = "${local.service_name}-instance-check"
-      Type = "monitoring"
+      Type = "auto-recovery"
     }
   )
 }
@@ -68,8 +74,8 @@ resource "aws_cloudwatch_metric_alarm" "pmm_status_check_failed" {
   statistic           = "Maximum"
   period              = 60
   evaluation_periods  = 2
-  threshold           = 1
-  comparison_operator = "GreaterThanThreshold"
+  threshold           = 0.5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
 
   dimensions = {
     InstanceId = aws_instance.pmm_server.id
@@ -81,6 +87,39 @@ resource "aws_cloudwatch_metric_alarm" "pmm_status_check_failed" {
     local.common_tags,
     {
       Name = "${local.service_name}-status-check"
+      Type = "monitoring"
+    }
+  )
+}
+
+# Reboot loop detection - alerts if instance reboots frequently
+# Indicates persistent problem that reboot can't fix (config issue, disk full, etc.)
+resource "aws_cloudwatch_metric_alarm" "pmm_frequent_reboots" {
+  count = var.enable_auto_recovery ? 1 : 0
+
+  alarm_name          = "${local.service_name}-frequent-reboots"
+  alarm_description   = "Alert when PMM instance is rebooting too frequently (possible reboot loop)"
+  namespace           = "AWS/EC2"
+  metric_name         = "StatusCheckFailed_Instance"
+  statistic           = "Sum" # Count failures over period
+  period              = 3600  # 1 hour window
+  evaluation_periods  = 1
+  threshold           = 2 # More than 2 failures per hour = problem
+  comparison_operator = "GreaterThanThreshold"
+  datapoints_to_alarm = 1
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    InstanceId = aws_instance.pmm_server.id
+  }
+
+  # Only send notifications (no auto-action - needs manual investigation)
+  alarm_actions = local.all_alarm_targets
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${local.service_name}-reboot-loop"
       Type = "monitoring"
     }
   )

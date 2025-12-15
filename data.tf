@@ -21,6 +21,11 @@ data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
+# Get instance type details for swap configuration
+data "aws_ec2_instance_type" "pmm" {
+  instance_type = var.instance_type
+}
+
 # Get latest Ubuntu Pro 24.04 LTS (Noble) AMI
 data "aws_ami" "ubuntu_pro" {
   most_recent = true

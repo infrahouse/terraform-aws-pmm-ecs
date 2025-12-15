@@ -1,0 +1,58 @@
+#!/bin/bash
+# Configure swap file for PMM instance
+# This prevents OOM kills during memory spikes while still preferring RAM
+
+set -euo pipefail
+
+SWAP_FILE="/swapfile"
+INSTANCE_RAM_MB="${instance_ram_mb}"
+SWAP_SIZE_MB="$${INSTANCE_RAM_MB}"  # 1x RAM (not 2x - less wasteful for large instances)
+
+echo "Configuring swap: $${SWAP_SIZE_MB}MB swap for $${INSTANCE_RAM_MB}MB RAM instance"
+
+# Check if swap already exists (idempotent for reboots)
+if swapon --show | grep -q "$${SWAP_FILE}"; then
+    echo "Swap already configured and active, skipping"
+    exit 0
+fi
+
+# Create swap file
+if [ ! -f "$${SWAP_FILE}" ]; then
+    echo "Creating swap file..."
+    fallocate -l "$${SWAP_SIZE_MB}M" "$${SWAP_FILE}"
+    chmod 600 "$${SWAP_FILE}"
+    mkswap "$${SWAP_FILE}"
+fi
+
+# Enable swap
+echo "Enabling swap..."
+swapon "$${SWAP_FILE}"
+
+# Make swap persistent across reboots
+if ! grep -q "$${SWAP_FILE}" /etc/fstab; then
+    echo "Adding swap to /etc/fstab for persistence..."
+    echo "$${SWAP_FILE} none swap sw 0 0" >> /etc/fstab
+fi
+
+# Configure swappiness (10 = only swap when necessary, not proactively)
+# Default is 60 which is too aggressive for database workloads
+echo "Configuring swappiness to 10 (swap only when necessary)..."
+sysctl vm.swappiness=10
+
+# Make swappiness persistent
+if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
+    echo "vm.swappiness=10" >> /etc/sysctl.conf
+fi
+
+# Configure vfs_cache_pressure (reduce tendency to reclaim inodes/dentries from cache)
+# Default is 100, lower values preserve directory/inode cache
+echo "Configuring vfs_cache_pressure to 50..."
+sysctl vm.vfs_cache_pressure=50
+
+if ! grep -q "vm.vfs_cache_pressure" /etc/sysctl.conf; then
+    echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.conf
+fi
+
+echo "Swap configuration complete:"
+swapon --show
+free -h

@@ -34,6 +34,7 @@ module "pmm" {
 
   # custom queries
   postgresql_custom_queries_medium_resolution = file("${path.module}/queries/pg-med-res.yml")
+  postgresql_custom_queries_low_resolution    = file("${path.module}/queries/pg-low-res.yml")
 }
 
 # Data source to read the actual admin password from Secrets Manager
