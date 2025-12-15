@@ -52,3 +52,13 @@ output "backup_role_arn" {
   description = "ARN of the IAM role used by AWS Backup"
   value       = aws_iam_role.backup.arn
 }
+
+output "root_volume_size_gb" {
+  description = "Actual root volume size in GB (automatically calculated based on instance RAM for swap)"
+  value       = local.actual_root_volume_size
+}
+
+output "swap_size_gb" {
+  description = "Configured swap size in GB (equal to instance RAM)"
+  value       = local.swap_size_gb
+}

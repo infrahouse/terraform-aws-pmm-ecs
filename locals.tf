@@ -12,6 +12,15 @@ locals {
 
   cloudwatch_log_group = "/aws/ecs/${local.service_name}"
 
+  # Root volume sizing calculations
+  # Formula: OS (10GB) + Swap (1x RAM) + Buffer (5GB) = minimum root volume size
+  instance_ram_gb         = data.aws_ec2_instance_type.pmm.memory_size / 1024
+  swap_size_gb            = local.instance_ram_gb
+  base_os_size_gb         = 10 # Ubuntu + Docker + CloudWatch Agent
+  buffer_size_gb          = 5  # Logs, temp files, growth
+  min_root_volume_size    = local.base_os_size_gb + local.swap_size_gb + local.buffer_size_gb
+  actual_root_volume_size = max(var.root_volume_size, local.min_root_volume_size)
+
   # PMM environment variables
   pmm_environment_variables = [
     {

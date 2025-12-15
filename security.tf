@@ -65,7 +65,7 @@ resource "random_password" "admin" {
 
 # Admin password secret using InfraHouse secret module
 module "admin_password_secret" {
-  source  = "infrahouse/secret/aws"
+  source  = "registry.infrahouse.com/infrahouse/secret/aws"
   version = "1.1.1"
 
   secret_name        = "${local.service_name}-admin-password"

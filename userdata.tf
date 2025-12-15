@@ -17,7 +17,15 @@ data "cloudinit_config" "pmm_persistent" {
     })
   }
 
-  # Part 3: Cloud-config for package installation and configuration files
+  # Part 3: Configure swap to prevent OOM kills
+  part {
+    content_type = "text/x-shellscript"
+    content = templatefile("${path.module}/templates/configure-swap.sh.tftpl", {
+      instance_ram_mb = data.aws_ec2_instance_type.pmm.memory_size
+    })
+  }
+
+  # Part 4: Cloud-config for package installation and configuration files
   part {
     content_type = "text/cloud-config"
     content = join(
@@ -124,7 +132,7 @@ data "cloudinit_config" "pmm_persistent" {
     )
   }
 
-  # Part 4: Start all services
+  # Part 5: Start all services
   part {
     content_type = "text/x-shellscript"
     content      = templatefile("${path.module}/templates/start-services.sh.tftpl", {})

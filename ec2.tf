@@ -11,8 +11,9 @@ resource "aws_instance" "pmm_server" {
   monitoring = true
 
   # Root volume configuration
+  # Size is automatically calculated: OS (10GB) + Swap (1x RAM) + Buffer (5GB)
   root_block_device {
-    volume_size           = var.root_volume_size
+    volume_size           = local.actual_root_volume_size
     volume_type           = "gp3"
     encrypted             = true
     kms_key_id            = var.kms_key_id

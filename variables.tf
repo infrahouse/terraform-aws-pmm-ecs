@@ -153,7 +153,12 @@ variable "ebs_throughput" {
 }
 
 variable "root_volume_size" {
-  description = "Size of the root volume in GB"
+  description = <<-EOF
+    Minimum size of the root volume in GB.
+    Actual size will be automatically calculated as: OS (10GB) + Swap (1x instance RAM) + Buffer (5GB).
+    For example, m5.large (8GB RAM) requires minimum 23GB (10 + 8 + 5).
+    Set this higher if you need additional space for logs or applications.
+  EOF
   type        = number
   default     = 20
 
