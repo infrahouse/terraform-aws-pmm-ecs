@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2025-12-15
+
+### Bug Fixes
+
+- Resolve OOM kills and fix CloudWatch alarms
+
 ## [1.0.0] - 2025-12-13
 
 ### Bug Fixes
