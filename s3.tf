@@ -5,7 +5,7 @@ data "aws_elb_service_account" "main" {}
 
 module "alb_logs_bucket" {
   source  = "registry.infrahouse.com/infrahouse/s3-bucket/aws"
-  version = "0.3.0"
+  version = "0.3.1"
 
   bucket_name = "${local.service_name}-alb-logs-${data.aws_caller_identity.current.account_id}"
 
