@@ -72,3 +72,31 @@ variable "postgres_password" {
   type        = string
   sensitive   = true
 }
+
+# Variables from percona_server fixture
+variable "mysql_security_group_id" {
+  description = "Security group ID from Percona Server fixture"
+  type        = string
+}
+
+variable "mysql_address" {
+  description = "MySQL NLB DNS name from Percona Server fixture"
+  type        = string
+}
+
+variable "mysql_port" {
+  description = "MySQL port"
+  type        = number
+  default     = 3306
+}
+
+variable "mysql_username" {
+  description = "MySQL monitor username"
+  type        = string
+}
+
+variable "mysql_password" {
+  description = "MySQL monitor password"
+  type        = string
+  sensitive   = true
+}

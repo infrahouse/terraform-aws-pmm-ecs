@@ -13,9 +13,10 @@ module "pmm" {
 
   service_name = "pmm-ecs-test"
 
-  # Grant PMM access to the test PostgreSQL instance (from pytest-infrahouse fixture)
+  # Grant PMM access to test database instances
   rds_security_group_ids = [
-    var.postgres_security_group_id
+    var.postgres_security_group_id,
+    var.mysql_security_group_id,
   ]
   allowed_cidr = [
     "0.0.0.0/0"

@@ -371,7 +371,7 @@ variable "ssh_key_name" {
   default     = null
 
   validation {
-    condition     = var.ssh_key_name == null || length(var.ssh_key_name) > 0
+    condition     = var.ssh_key_name == null ? true : length(var.ssh_key_name) > 0
     error_message = "SSH key name must be a non-empty string if provided"
   }
 }
