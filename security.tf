@@ -57,6 +57,19 @@ resource "aws_security_group_rule" "pmm_to_rds_postgres" {
   description              = "Allow PMM server to connect to PostgreSQL"
 }
 
+# Allow PMM to access RDS/MySQL instances on port 3306 (MySQL)
+resource "aws_security_group_rule" "pmm_to_rds_mysql" {
+  count = length(var.rds_security_group_ids)
+
+  type                     = "ingress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.pmm_instance.id
+  security_group_id        = var.rds_security_group_ids[count.index]
+  description              = "Allow PMM server to connect to MySQL"
+}
+
 # Generate random admin password
 resource "random_password" "admin" {
   length  = 32

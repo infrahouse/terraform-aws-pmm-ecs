@@ -62,6 +62,28 @@ output "postgres_password" {
   sensitive   = true
 }
 
+output "mysql_address" {
+  description = "MySQL NLB DNS name"
+  value       = var.mysql_address
+}
+
+output "mysql_port" {
+  description = "MySQL port"
+  value       = var.mysql_port
+}
+
+output "mysql_username" {
+  description = "MySQL monitor username"
+  value       = var.mysql_username
+  sensitive   = true
+}
+
+output "mysql_password" {
+  description = "MySQL monitor password"
+  value       = var.mysql_password
+  sensitive   = true
+}
+
 output "backup_vault_name" {
   description = "Name of the AWS Backup vault"
   value       = module.pmm.backup_vault_name
