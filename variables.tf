@@ -225,7 +225,7 @@ variable "additional_certificate_arns" {
 variable "ssl_policy" {
   description = "SSL policy for HTTPS listener"
   type        = string
-  default     = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  default     = "ELBSecurityPolicy-TLS13-1-2-Res-2021-06"
 }
 
 variable "enable_deletion_protection" {
