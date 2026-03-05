@@ -90,7 +90,10 @@ module "admin_password_secret" {
     var.secret_readers,
     [
       aws_iam_role.pmm_instance.arn,
-    ]
+    ],
+    local.create_reconciler ? [
+      module.pmm_reconciler[0].lambda_role_arn,
+    ] : []
   )
 
   tags = local.common_tags

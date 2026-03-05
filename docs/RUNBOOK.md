@@ -755,6 +755,102 @@ terraform destroy -target=module.pmm.aws_instance.pmm_server
 terraform apply -target=module.pmm.aws_instance.pmm_server
 ```
 
+## ASG Reconciler Lambda
+
+The Lambda reconciler automatically manages pmm-client on Auto Scaling Group
+instances. It runs every 5 minutes via EventBridge and is only created when
+`monitored_asgs` is configured.
+
+### Checking Lambda Status
+
+```bash
+# Get Lambda function name
+FUNCTION_NAME=$(aws lambda list-functions \
+  --query "Functions[?contains(FunctionName, 'reconciler')].FunctionName" \
+  --output text)
+
+# Check recent invocations
+aws logs tail /aws/lambda/$FUNCTION_NAME --since 1h
+```
+
+### Manually Invoking the Lambda
+
+```bash
+# Invoke and see output
+aws lambda invoke \
+  --function-name $FUNCTION_NAME \
+  --log-type Tail \
+  --query 'LogResult' \
+  --output text /dev/stdout | base64 -d
+
+# Or invoke and get result payload
+aws lambda invoke \
+  --function-name $FUNCTION_NAME \
+  output.json && cat output.json
+```
+
+Expected output:
+```json
+{"status": "ok", "added": 0, "removed": 0, "errors": []}
+```
+
+### Verifying pmm-client on ASG Instances
+
+```bash
+# Check pmm-client status on a specific instance
+aws ssm start-session --target <instance-id>
+
+# Inside the instance:
+sudo pmm-admin status
+sudo pmm-admin list
+
+# Check specific agents
+sudo pmm-admin status 2>/dev/null | grep mysqld_exporter
+```
+
+### Removing a Stale PMM Service
+
+If a service exists in PMM for a terminated instance:
+
+1. **Via PMM UI**: Configuration > Inventory > Services > Delete
+2. **Via API**:
+```bash
+# Get admin password
+PMM_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id <admin-password-secret-arn> \
+  --query SecretString --output text)
+
+# List services
+curl -s -u admin:$PMM_PASSWORD \
+  http://<pmm-private-ip>/v1/management/services | jq .
+
+# Remove a service (force=true removes dependent agents)
+curl -s -u admin:$PMM_PASSWORD \
+  -X DELETE \
+  "http://<pmm-private-ip>/v1/inventory/services/<service-id>?force=true"
+```
+
+### Troubleshooting Lambda Failures
+
+**Lambda timeout (>300s)**:
+- First-time pmm-client install takes ~60s per instance
+- With 3+ instances sequential, may approach 300s limit
+- Check CloudWatch logs for which instance is slow
+
+**SSM command failures**:
+- Verify instance is InService in ASG and SSM-managed
+- Check instance IAM role has SSM permissions
+- Ensure `/opt/puppetlabs/bin` is in PATH (Puppet facts required)
+
+**"already exists" errors**:
+- Lambda automatically removes stale services and retries
+- If it persists, manually delete the service from PMM UI
+
+**pmm-agent connection timeout**:
+- Verify security group allows port 443 from ASG SG to PMM instance
+- pmm-agent connects directly to PMM EC2 (not via ALB)
+- Check: `pmm-admin status` should show `Connected : true`
+
 ## Regular Maintenance Schedule
 
 ### Daily

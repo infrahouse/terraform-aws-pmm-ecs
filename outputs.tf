@@ -62,3 +62,13 @@ output "swap_size_gb" {
   description = "Configured swap size in GB (equal to instance RAM)"
   value       = local.swap_size_gb
 }
+
+output "reconciler_lambda_function_arn" {
+  description = "ARN of the PMM ASG reconciler Lambda function (null if no ASGs configured)"
+  value       = local.create_reconciler ? module.pmm_reconciler[0].lambda_function_arn : null
+}
+
+output "reconciler_lambda_role_arn" {
+  description = "ARN of the IAM role used by the PMM ASG reconciler Lambda (null if no ASGs configured)"
+  value       = local.create_reconciler ? module.pmm_reconciler[0].lambda_role_arn : null
+}

@@ -36,6 +36,17 @@ module "pmm" {
   # custom queries
   postgresql_custom_queries_medium_resolution = file("${path.module}/queries/pg-med-res.yml")
   postgresql_custom_queries_low_resolution    = file("${path.module}/queries/pg-low-res.yml")
+
+  # ASG reconciler (only when ASG name is provided)
+  monitored_asgs = var.mysql_asg_name != "" ? [
+    {
+      asg_name          = var.mysql_asg_name
+      service_type      = "mysql"
+      port              = 3306
+      username          = "monitor"
+      security_group_id = var.mysql_security_group_id
+    }
+  ] : []
 }
 
 # Data source to read the actual admin password from Secrets Manager

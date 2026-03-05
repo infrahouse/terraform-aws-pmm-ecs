@@ -79,24 +79,8 @@ variable "mysql_security_group_id" {
   type        = string
 }
 
-variable "mysql_address" {
-  description = "MySQL NLB DNS name from Percona Server fixture"
+variable "mysql_asg_name" {
+  description = "ASG name for Percona Server cluster (for reconciler testing)"
   type        = string
-}
-
-variable "mysql_port" {
-  description = "MySQL port"
-  type        = number
-  default     = 3306
-}
-
-variable "mysql_username" {
-  description = "MySQL monitor username"
-  type        = string
-}
-
-variable "mysql_password" {
-  description = "MySQL monitor password"
-  type        = string
-  sensitive   = true
+  default     = ""
 }

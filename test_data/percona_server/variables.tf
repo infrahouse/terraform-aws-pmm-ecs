@@ -25,3 +25,4 @@ variable "alarm_emails" {
   type        = list(string)
   default     = ["test@example.com"]
 }
+

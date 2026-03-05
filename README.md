@@ -17,6 +17,7 @@ Deploy [Percona Monitoring and Management (PMM)](https://www.percona.com/softwar
 - ✅ **Custom PostgreSQL queries** with configurable collection intervals (high/medium/low resolution)
 - ✅ **Comprehensive CloudWatch monitoring** with dashboard and alarms for instance, disk, memory, and EBS metrics
 - ✅ **Auto-generated passwords** stored securely in AWS Secrets Manager
+- ✅ **MySQL/Percona Server monitoring** via Lambda ASG reconciler with automatic pmm-client installation
 - ✅ **PMM 3.x by default** (PMM 2 EOL July 2025)
 - ✅ **Ubuntu Pro 24.04 LTS** with official Docker CE installation
 
@@ -314,6 +315,96 @@ query_name:
 
 For complete query format documentation, see [Percona PMM Documentation](https://docs.percona.com/percona-monitoring-and-management/how-to/extend-metrics.html).
 
+## Monitoring MySQL/Percona Server ASG Instances
+
+For MySQL or Percona Server instances running in Auto Scaling Groups, this module
+provides an automated Lambda reconciler that installs and configures `pmm-client`
+on each instance. This gives you both OS metrics (CPU, memory, disk via
+`node_exporter`) and MySQL metrics (queries, connections, InnoDB via
+`mysqld_exporter`).
+
+### How It Works
+
+1. A Lambda function runs every 5 minutes (via EventBridge)
+2. It discovers ASG instances and compares with PMM's service inventory
+3. For **new instances**: installs pmm-client via SSM and configures MySQL monitoring
+4. For **terminated instances**: removes the service from PMM via API
+5. Services are named `{asg_name}/{hostname}` (e.g., `my-asg/ip-10-0-1-42`)
+
+### Prerequisites
+
+- ASG instances must be SSM-managed (SSM agent installed, IAM role with SSM
+  permissions)
+- Instances must have `percona-release` pre-installed (e.g., via Puppet)
+- Instance credentials stored in Secrets Manager, accessible via `ih-secrets`
+  and Puppet facts (`facter -p percona.credentials_secret`)
+- Private subnets must have NAT gateway (for Lambda to reach AWS APIs)
+
+### Configuration
+
+Use with the [terraform-aws-percona-server](https://github.com/infrahouse/terraform-aws-percona-server) module:
+
+```hcl
+module "percona" {
+  source  = "infrahouse/percona-server/aws"
+  version = "..."
+
+  # ... Percona Server configuration ...
+}
+
+module "pmm" {
+  source  = "infrahouse/pmm-ecs/aws"
+  version = "..."
+
+  # ... other PMM configuration ...
+
+  monitored_asgs = [
+    {
+      asg_name          = module.percona.asg_name
+      service_type      = "mysql"
+      port              = 3306
+      username          = "monitor"
+      security_group_id = module.percona.security_group_id
+    }
+  ]
+}
+```
+
+**`monitored_asgs` fields**:
+
+| Field | Description |
+|-------|-------------|
+| `asg_name` | Name of the Auto Scaling Group (not ARN) |
+| `service_type` | Database type (`"mysql"` currently supported) |
+| `port` | Database port (e.g., `3306`) |
+| `username` | Key in the credentials JSON for password lookup |
+| `security_group_id` | SG of ASG instances (used to allow port 443 to PMM) |
+
+### Important: pmm-agent Connectivity
+
+pmm-agent uses gRPC (HTTP/2) which is **not supported by AWS ALB**. The module
+automatically creates security group rules allowing ASG instances to connect
+directly to the PMM EC2 instance on port 443. The agent uses a self-signed
+certificate with `--server-insecure-tls`.
+
+### Verification
+
+After the Lambda runs, the PMM Inventory will show services named
+`{asg_name}/{hostname}` for each ASG instance:
+
+![PMM Inventory showing Percona Server ASG services](docs/images/Screenshot%202026-03-04%20211115.png)
+
+Check pmm-client status on an ASG instance:
+
+```bash
+# Connect to instance via SSM
+aws ssm start-session --target <instance-id>
+
+# Check pmm-client status
+sudo pmm-admin status    # Should show Connected: true
+sudo pmm-admin list      # Should show MySQL service
+```
+
 ## Architecture
 
 ```
@@ -347,15 +438,24 @@ For complete query format documentation, see [Percona PMM Documentation](https:/
         │                                     │
         │  - EC2 Auto-Recovery enabled        │
         │  - CloudWatch Agent for monitoring  │
-        └──────────────────┬──────────────────┘
-                           │
-             ┌─────────────┼──────────────┐
-             │             │              │
-      ┌──────▼──────┐  ┌───▼────┐  ┌──────▼──────┐
-      │  Secrets    │  │ AWS    │  │ CloudWatch  │
-      │  Manager    │  │ Backup │  │ Dashboard   │
-      │ (Password)  │  │(Daily) │  │ + Alarms    │
-      └─────────────┘  └────────┘  └─────────────┘
+        │  - Port 443: pmm-agent gRPC from    │
+        │    monitored ASG instances          │
+        └──────────┬───────────┬──────────────┘
+                   │           │
+     ┌─────────────┼───────────┼─────────────┐
+     │             │           │             │
+┌────▼─────┐ ┌────▼───┐ ┌─────▼─────┐ ┌──────▼──────┐
+│ Secrets  │ │ AWS    │ │CloudWatch │ │   Lambda    │
+│ Manager  │ │ Backup │ │Dashboard  │ │ Reconciler  │
+│(Password)│ │(Daily) │ │+ Alarms   │ │(ASG→PMM,opt)│
+└──────────┘ └────────┘ └───────────┘ └──────┬──────┘
+                                             │
+                                    ┌────────▼─────────┐
+                                    │  Percona Server  │
+                                    │  ASG Instances   │
+                                    │  (pmm-client     │
+                                    │   via SSM)       │
+                                    └──────────────────┘
 ```
 
 ### Key Components
@@ -368,6 +468,7 @@ For complete query format documentation, see [Percona PMM Documentation](https:/
 - **Secrets Manager**: Auto-generated 32-character admin password
 - **CloudWatch**: Dashboard with instance metrics + alarms for EC2, ALB, memory, disk, and EBS burst balance
 - **CloudWatch Agent**: Collects memory and disk usage metrics from the instance
+- **Lambda Reconciler** (optional): Installs pmm-client on ASG instances via SSM, removes terminated instances from PMM
 
 ## Performance Sizing
 

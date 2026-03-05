@@ -22,49 +22,6 @@ setup_logging(LOG, debug=True, debug_botocore=False)
 
 
 @pytest.fixture(scope="session")
-def postgres_pmm(
-    request,
-    service_network,
-    keep_after,
-    aws_region,
-    test_role_arn,
-    boto3_session,
-    postgres,
-):
-    """
-    Enhanced PostgreSQL fixture with PMM monitoring support.
-
-    Uses AWS Systems Manager (SSM) to configure PostgreSQL from an EC2 instance
-    inside the VPC, avoiding direct network connectivity requirements.
-
-    Configures:
-    - Custom parameter group with pg_stat_statements enabled
-    - pg_stat_statements extension in the database
-    - rds_superuser role for monitoring user
-    """
-    # Create the base PostgreSQL instance
-    LOG.info("=" * 80)
-    LOG.info("Configuring PostgreSQL for PMM monitoring via SSM")
-    LOG.info("=" * 80)
-
-    # Get connection details
-    db_host = postgres["address"]["value"]
-    db_port = postgres["port"]["value"]
-    db_name = postgres["database_name"]["value"]
-    db_user = postgres["master_username"]["value"]
-    db_password = postgres["master_password"]["value"]
-
-    LOG.info("PostgreSQL instance: %s:%s", db_host, db_port)
-    LOG.info("Waiting for PostgreSQL to be fully ready...")
-    time.sleep(30)
-
-    # Note: We need the PMM deployment first to get an EC2 instance to run commands from
-    # This fixture will be called AFTER the PMM deployment in the test
-    # For now, just yield the postgres output - configuration happens in test
-    yield postgres
-
-
-@pytest.fixture(scope="session")
 def percona_server(request, service_network, keep_after, aws_region, test_role_arn):
     """
     Deploy a Percona Server cluster for MySQL monitoring tests.
@@ -231,6 +188,7 @@ def percona_pmm(percona_server, boto3_session, aws_region, test_role_arn):
         "writer_endpoint": percona_server["writer_endpoint"]["value"],
         "reader_endpoint": percona_server["reader_endpoint"]["value"],
         "instance_ips": instance_ips,
+        "asg_name": asg_name,
     }
 
     LOG.info("MySQL address: %s:%d", result["address"], result["port"])
@@ -300,7 +258,7 @@ def configure_postgres_via_ssm(
             f"Installation failed - 'Installation complete' marker not found"
         )
 
-    LOG.info("✓ python3-psycopg2 installed")
+    LOG.info("python3-psycopg2 installed")
 
     # Create Python script to configure PostgreSQL
     python_script = dedent(
@@ -342,17 +300,17 @@ def configure_postgres_via_ssm(
             # Enable pg_stat_statements extension
             print("Enabling pg_stat_statements extension...")
             cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements;")
-            print("✓ pg_stat_statements extension enabled")
+            print("pg_stat_statements extension enabled")
 
             # Grant rds_superuser role
             print("Granting rds_superuser role to {db_user}...")
             cursor.execute("GRANT rds_superuser TO {db_user};")
-            print("✓ rds_superuser role granted")
+            print("rds_superuser role granted")
 
             # Verify extension
             cursor.execute("SELECT * FROM pg_extension WHERE extname = 'pg_stat_statements';")
             if cursor.fetchone():
-                print("✓ pg_stat_statements extension is installed and ready")
+                print("pg_stat_statements extension is installed and ready")
             else:
                 print("ERROR: pg_stat_statements extension verification failed!")
                 sys.exit(1)
@@ -361,7 +319,7 @@ def configure_postgres_via_ssm(
             cursor.execute("SELECT pg_has_role('{db_user}', 'rds_superuser', 'member');")
             has_role = cursor.fetchone()[0]
             if has_role:
-                print("✓ User {db_user} has rds_superuser role")
+                print("User {db_user} has rds_superuser role")
             else:
                 print("ERROR: User {db_user} does NOT have rds_superuser role!")
                 sys.exit(1)
@@ -372,10 +330,6 @@ def configure_postgres_via_ssm(
             print("")
             print("=" * 60)
             print("PostgreSQL PMM configuration completed successfully")
-            print("All requirements for PMM monitoring are satisfied:")
-            print("  ✓ shared_preload_libraries includes pg_stat_statements")
-            print("  ✓ pg_stat_statements extension is enabled")
-            print("  ✓ User has rds_superuser role")
             print("=" * 60)
 
         except Exception as e:

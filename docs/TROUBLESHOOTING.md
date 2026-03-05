@@ -1,6 +1,7 @@
-# PMM ECS Troubleshooting Guide
+# PMM Troubleshooting Guide
 
-This guide covers common issues and their solutions when deploying and operating PMM on AWS ECS.
+This guide covers common issues and their solutions when deploying and
+operating PMM on AWS EC2.
 
 ## Table of Contents
 
@@ -9,51 +10,51 @@ This guide covers common issues and their solutions when deploying and operating
 - [Performance Issues](#performance-issues)
 - [Storage Issues](#storage-issues)
 - [Monitoring Issues](#monitoring-issues)
+- [ASG Reconciler Lambda Issues](#asg-reconciler-lambda-issues)
 - [Recovery Procedures](#recovery-procedures)
 
 ## Deployment Issues
 
 ### Terraform Apply Fails
 
-#### Issue: ECS task fails to start
+#### Issue: PMM container fails to start
 
 **Symptoms**:
-- Terraform times out waiting for ECS service to become healthy
-- ECS task in STOPPED state with error message
+- PMM UI not accessible after deployment
+- `systemctl status pmm-server` shows failed state
 
 **Diagnosis**:
 ```bash
-# Check ECS task status
-aws ecs list-tasks --cluster pmm-server --desired-status STOPPED
+# SSH to instance or use SSM Session Manager
+aws ssm start-session --target <instance-id>
 
-# Get task details
-aws ecs describe-tasks --cluster pmm-server --tasks <task-arn>
+# Check systemd service status
+sudo systemctl status pmm-server
 
-# Check CloudWatch logs
-aws logs tail /aws/ecs/pmm-server --follow
+# Check Docker container logs
+sudo docker logs pmm-server --tail 100
+
+# Check cloud-init logs for startup issues
+sudo cat /var/log/cloud-init-output.log | tail -100
 ```
 
 **Common causes**:
-1. EFS mount failure
+1. EBS volume mount failure
 2. Secrets Manager permission denied
 3. Out of memory/CPU
-4. Container image pull failure
+4. Docker image pull failure
 
 **Resolution**:
-```hcl
-# Verify EFS mount targets exist
-resource "aws_efs_mount_target" "pmm_data" {
-  for_each       = toset(var.private_subnet_ids)
-  file_system_id = aws_efs_file_system.pmm_data.id
-  subnet_id      = each.key
+```bash
+# Verify EBS volume is mounted
+mount | grep /srv
+df -h /srv
 
-  security_groups = [aws_security_group.efs.id]
-}
+# Remount if needed
+sudo mount /dev/xvdf /srv
 
-# Verify depends_on in main.tf
-depends_on = [
-  aws_efs_mount_target.pmm_data
-]
+# Restart PMM container
+sudo systemctl restart pmm-server
 ```
 
 #### Issue: ALB health checks failing
@@ -73,35 +74,39 @@ aws s3 ls s3://<alb-logs-bucket>/AWSLogs/
 ```
 
 **Resolution**:
-1. Verify PMM container is listening on port 443
-2. Check security group rules allow ALB → ECS traffic
-3. Increase health check grace period:
-```hcl
-health_check_grace_period_seconds = 300
-```
+1. Verify PMM container is running: `sudo docker ps | grep pmm`
+2. Check security group rules allow ALB → EC2 on port 80
+3. Test health endpoint locally: `curl http://localhost/v1/readyz`
+4. Restart PMM if needed: `sudo systemctl restart pmm-server`
 
 ### Terraform Destroy Fails
 
-#### Issue: EFS filesystem cannot be deleted
+#### Issue: EBS volume cannot be deleted
 
 **Symptoms**:
 ```
-Error: deleting EFS File System: FileSystemInUse
+Error: deleting EBS Volume: VolumeInUse
 ```
 
 **Resolution**:
 ```bash
-# Manually delete mount targets first
-aws efs describe-mount-targets \
-    --file-system-id fs-xxxxx \
-    --query 'MountTargets[*].MountTargetId' \
-    --output text | \
-    xargs -n1 aws efs delete-mount-target --mount-target-id
+# Stop the instance first
+aws ec2 stop-instances --instance-ids <instance-id>
 
-# Wait 30 seconds, then retry terraform destroy
-sleep 30
+# Wait for instance to stop, then retry
 terraform destroy
 ```
+
+#### Issue: Backup vault cannot be deleted
+
+**Symptoms**:
+```
+Error: deleting Backup Vault: vault has recovery points
+```
+
+**Resolution**:
+Set `backup_vault_force_destroy = true` in your Terraform config and apply,
+then destroy. Or delete recovery points manually via AWS Console.
 
 ## Access Issues
 
@@ -170,31 +175,30 @@ terraform output -raw admin_password_secret_arn | \
 
 **Diagnosis**:
 ```bash
-# Check ECS task metrics
+# Check EC2 instance metrics
 aws cloudwatch get-metric-statistics \
-    --namespace AWS/ECS \
+    --namespace AWS/EC2 \
     --metric-name CPUUtilization \
-    --dimensions Name=ServiceName,Value=pmm-server \
-                  Name=ClusterName,Value=pmm-server \
+    --dimensions Name=InstanceId,Value=<instance-id> \
     --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
     --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
     --period 300 \
     --statistics Average
 
-# Check EFS metrics
+# Check EBS volume performance
 aws cloudwatch get-metric-statistics \
-    --namespace AWS/EFS \
-    --metric-name BurstCreditBalance \
-    --dimensions Name=FileSystemId,Value=fs-xxxxx \
+    --namespace AWS/EBS \
+    --metric-name VolumeReadOps \
+    --dimensions Name=VolumeId,Value=<volume-id> \
     --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
     --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
     --period 300 \
-    --statistics Average
+    --statistics Sum
 ```
 
 **Common causes**:
 1. Insufficient CPU/memory
-2. EFS throughput limits
+2. EBS IOPS/throughput limits
 3. Too many monitored databases
 4. Long retention periods
 
@@ -204,83 +208,55 @@ aws cloudwatch get-metric-statistics \
 ```hcl
 module "pmm" {
   # ... other config ...
-
-  instance_type    = "m5.xlarge"    # from m5.large
-  container_cpu    = 4096           # from 2048
-  container_memory = 8192           # from 4096
+  instance_type = "m5.xlarge"  # from m5.large
 }
 ```
 
-**Provision EFS throughput**:
+**Increase EBS performance**:
 ```hcl
-variable "efs_throughput_mode" {
-  default = "provisioned"
-}
-
-variable "efs_provisioned_throughput" {
-  default = 100  # MiB/s
+module "pmm" {
+  # ... other config ...
+  ebs_iops       = 6000  # from 3000
+  ebs_throughput = 250   # from 125 MB/s
 }
 ```
-
-### High EFS Burst Credit Consumption
-
-**Symptoms**:
-- CloudWatch alarm: "EFS burst credit balance is low"
-- Slow PMM queries
-
-**Diagnosis**:
-```bash
-# Check burst credit balance
-aws cloudwatch get-metric-statistics \
-    --namespace AWS/EFS \
-    --metric-name BurstCreditBalance \
-    --dimensions Name=FileSystemId,Value=fs-xxxxx \
-    --start-time $(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S) \
-    --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
-    --period 3600 \
-    --statistics Minimum
-```
-
-**Resolution**:
-1. **Immediate**: Add more data to EFS (increases baseline throughput)
-2. **Long-term**: Switch to provisioned throughput mode
-3. **Optimization**: Reduce metrics retention in PMM settings
 
 ## Storage Issues
 
-### EFS Running Out of Space
+### EBS Data Volume Running Out of Space
 
 **Diagnosis**:
-```bash
-# Check EFS size
-aws efs describe-file-systems \
-    --file-system-id fs-xxxxx \
-    --query 'FileSystems[0].SizeInBytes'
-
-# Connect to EC2 instance and check disk usage
-sudo df -h /mnt/efs
-sudo du -sh /mnt/efs/*
-```
-
-**Resolution**:
-1. Reduce metrics retention in PMM:
-   - Login to PMM
-   - Go to **Configuration** → **Settings** → **Advanced Settings**
-   - Adjust **Data Retention** (default: 30 days)
-
-2. Clean up old data manually:
 ```bash
 # SSH to EC2 instance
 aws ssm start-session --target <instance-id>
 
-# Find large directories
-sudo du -sh /mnt/efs/* | sort -rh | head -10
-
-# Clean Prometheus data (if needed)
-sudo rm -rf /mnt/efs/prometheus/data/old_chunks
+# Check disk usage
+df -h /srv
+sudo du -sh /srv/* | sort -rh | head -10
 ```
 
-3. EFS automatically expands, but consider costs
+**Resolution**:
+1. Reduce metrics retention in PMM:
+   - Login to PMM UI
+   - Go to **Settings** → **Advanced Settings**
+   - Adjust **Data Retention** (default: 30 days)
+
+2. Expand EBS volume (no downtime):
+```hcl
+module "pmm" {
+  # ... other config ...
+  ebs_volume_size = 200  # increase from 100GB
+}
+```
+   After `terraform apply`, extend the filesystem:
+```bash
+sudo resize2fs /dev/xvdf
+```
+
+3. Clean up old data manually:
+```bash
+sudo du -sh /srv/* | sort -rh | head -10
+```
 
 ### Backup Failures
 
@@ -288,7 +264,7 @@ sudo rm -rf /mnt/efs/prometheus/data/old_chunks
 ```bash
 # List recent backup jobs
 aws backup list-backup-jobs \
-    --by-resource-arn "arn:aws:elasticfilesystem:us-west-1:123456789012:file-system/fs-xxxxx" \
+    --by-backup-vault-name <vault-name> \
     --max-results 10
 
 # Get backup job details
@@ -299,15 +275,16 @@ aws backup describe-backup-job \
 **Common causes**:
 1. IAM permissions issues
 2. Backup vault policy restrictions
-3. EFS in use during backup
 
 **Resolution**:
 ```bash
 # Verify backup role permissions
-aws iam get-role --role-name pmm-server-backup-role
+aws iam get-role --role-name <backup-role-name>
 
-# Manually trigger backup
-./scripts/backup-efs.sh fs-xxxxx
+# Create manual snapshot
+aws ec2 create-snapshot \
+    --volume-id <volume-id> \
+    --description "PMM manual backup"
 ```
 
 ## Monitoring Issues
@@ -318,7 +295,7 @@ aws iam get-role --role-name pmm-server-backup-role
 ```bash
 # Check alarm state
 aws cloudwatch describe-alarms \
-    --alarm-names pmm-server-ecs-service-running
+    --alarm-name-prefix pmm-server
 
 # Check SNS topic subscriptions
 aws sns list-subscriptions-by-topic \
@@ -331,7 +308,7 @@ aws sns list-subscriptions-by-topic \
 3. Test alarm manually:
 ```bash
 aws cloudwatch set-alarm-state \
-    --alarm-name pmm-server-ecs-service-running \
+    --alarm-name <alarm-name> \
     --state-value ALARM \
     --state-reason "Testing alarm"
 ```
@@ -350,9 +327,89 @@ aws cloudwatch set-alarm-state \
 **Resolution**:
 See [RDS_SETUP.md](./RDS_SETUP.md) for detailed RDS monitoring setup.
 
+## ASG Reconciler Lambda Issues
+
+### Lambda Not Creating Services
+
+**Symptoms**: New ASG instances don't appear in PMM inventory
+
+**Diagnosis**:
+```bash
+# Check Lambda logs
+FUNCTION_NAME=$(aws lambda list-functions \
+    --query "Functions[?contains(FunctionName, 'reconciler')].FunctionName" \
+    --output text)
+aws logs tail /aws/lambda/$FUNCTION_NAME --since 1h
+
+# Manually invoke and check result
+aws lambda invoke \
+    --function-name $FUNCTION_NAME \
+    output.json && cat output.json
+```
+
+**Common causes and fixes**:
+
+1. **pmm-agent connection timeout** (`dial tcp ...:443: i/o timeout`):
+   - Security group missing: port 443 ingress from ASG SG to PMM instance SG
+   - pmm-agent connects directly to PMM EC2 (NOT via ALB)
+   - Fix: ensure `security_group_id` is set in `monitored_asgs` config
+
+2. **"already exists" error on `pmm-admin add mysql`**:
+   - Service exists from a previous registration (stale)
+   - Lambda should auto-remove and retry, check logs for retry attempt
+   - Manual fix: delete stale service from PMM UI (Inventory > Services)
+
+3. **SSM command timeout**:
+   - Instance not SSM-managed (missing IAM role or SSM agent)
+   - Check: `aws ssm describe-instance-information --filters Key=InstanceIds,Values=<id>`
+
+4. **Credential lookup failure**:
+   - Puppet facts not available (`facter -p percona.credentials_secret`)
+   - `ih-secrets` CLI not installed
+   - Check `/opt/puppetlabs/bin` is in PATH
+
+### pmm-client Connected but No MySQL Metrics
+
+**Symptoms**: `pmm-admin status` shows `Connected : true` but no
+`mysqld_exporter`
+
+**Diagnosis** (on the instance):
+```bash
+sudo pmm-admin status
+sudo pmm-admin list
+```
+
+**Resolution**:
+```bash
+# Get credentials and add MySQL manually
+CREDS_SECRET=$(sudo facter -p percona.credentials_secret)
+DB_PASSWORD=$(sudo ih-secrets get "$CREDS_SECRET" | jq -r '.monitor')
+
+sudo pmm-admin add mysql \
+    --username='monitor' \
+    --password="$DB_PASSWORD" \
+    --host=127.0.0.1 \
+    --port=3306 \
+    --query-source=perfschema \
+    --service-name='<asg-name>/<hostname>'
+```
+
+### Lambda Returns Errors
+
+**Check the result payload**:
+```bash
+aws lambda invoke \
+    --function-name $FUNCTION_NAME \
+    output.json && cat output.json
+```
+
+Expected success: `{"status": "ok", "added": 0, "removed": 0, "errors": []}`
+
+If `"status": "error"`, check the `errors` array for per-ASG failure messages.
+
 ## Recovery Procedures
 
-### Recover from EFS Backup
+### Recover from EBS Backup
 
 #### Scenario: Data corruption or accidental deletion
 
@@ -361,46 +418,20 @@ See [RDS_SETUP.md](./RDS_SETUP.md) for detailed RDS monitoring setup.
 1. List available recovery points:
 ```bash
 aws backup list-recovery-points-by-backup-vault \
-    --backup-vault-name pmm-server-backup-vault \
+    --backup-vault-name <vault-name> \
     --query 'RecoveryPoints[*].[RecoveryPointArn,CreationDate]' \
     --output table
 ```
 
-2. Create new EFS filesystem:
-```bash
-aws efs create-file-system \
-    --creation-token pmm-recovery-$(date +%s) \
-    --encrypted \
-    --performance-mode generalPurpose \
-    --throughput-mode bursting
-```
+2. Stop PMM instance and detach corrupted volume.
 
-3. Restore from backup:
-```bash
-# Get the recovery point ARN from step 1
-RECOVERY_POINT_ARN="arn:aws:backup:..."
-NEW_EFS_ID="fs-xxxxx"
+3. Create new EBS volume from snapshot in the same AZ.
 
-aws backup start-restore-job \
-    --recovery-point-arn "$RECOVERY_POINT_ARN" \
-    --iam-role-arn "arn:aws:iam::account-id:role/pmm-server-backup-role" \
-    --metadata file-system-id="$NEW_EFS_ID"
-```
+4. Attach new volume as `/dev/xvdf` and start instance.
 
-4. Monitor restore progress:
-```bash
-aws backup describe-restore-job \
-    --restore-job-id <restore-job-id>
-```
+5. Verify data integrity in PMM UI.
 
-5. Update Terraform to use new EFS:
-```hcl
-# In a emergency, manually update
-# Or import new EFS into Terraform state
-terraform import aws_efs_file_system.pmm_data fs-xxxxx
-```
-
-6. Restart ECS service to mount new EFS
+See [BACKUP_RESTORE.md](./BACKUP_RESTORE.md) for detailed procedures.
 
 ### Complete Disaster Recovery
 
@@ -408,26 +439,18 @@ terraform import aws_efs_file_system.pmm_data fs-xxxxx
 
 **Prerequisites**:
 - Terraform state backed up (S3 with versioning)
-- Recent EFS backup available
+- Recent EBS snapshot available
 - DNS records documented
 
 **Steps**:
 
-1. Deploy infrastructure in new region:
-```bash
-# Update provider region
-terraform apply -var="region=us-east-1"
-```
-
-2. Restore data from backup (see above)
-
-3. Update DNS records to point to new ALB
-
+1. Deploy infrastructure in new region
+2. Restore EBS volume from snapshot
+3. DNS records update automatically via ALB
 4. Verify PMM is accessible
-
 5. Re-add monitored databases to PMM
 
-**RTO**: ~2 hours
+**RTO**: ~30 minutes (same AZ), ~2 hours (new region)
 **RPO**: 24 hours (daily backups)
 
 ### Rollback After Failed Upgrade
@@ -440,8 +463,7 @@ terraform apply -var="region=us-east-1"
 ```hcl
 module "pmm" {
   # ... other config ...
-
-  pmm_version = "2"  # or previous working version
+  pmm_version = "3"  # or previous working version
 }
 ```
 
@@ -450,40 +472,30 @@ module "pmm" {
 terraform apply
 ```
 
-3. ECS will perform rolling update back to old version
+3. Instance will be recreated with previous Docker image version.
 
-4. Data persists on EFS (no data loss)
+4. Data persists on EBS volume (no data loss).
 
 ## Getting Help
 
 ### Collect Diagnostic Information
 
 ```bash
-# ECS service status
-aws ecs describe-services \
-    --cluster pmm-server \
-    --services pmm-server > ecs-service.json
+# EC2 instance status
+aws ec2 describe-instance-status \
+    --instance-ids <instance-id> > instance-status.json
 
-# ECS task details
-aws ecs describe-tasks \
-    --cluster pmm-server \
-    --tasks $(aws ecs list-tasks \
-        --cluster pmm-server \
-        --service-name pmm-server \
-        --query 'taskArns[0]' \
-        --output text) > ecs-task.json
-
-# CloudWatch logs
-aws logs tail /aws/ecs/pmm-server \
-    --since 1h > pmm-logs.txt
-
-# EFS status
-aws efs describe-file-systems \
-    --file-system-id fs-xxxxx > efs-status.json
+# PMM container logs
+ssh ubuntu@<instance-ip> \
+    "sudo journalctl -u pmm-server --since '1 hour ago'" > pmm-logs.txt
 
 # Target health
 aws elbv2 describe-target-health \
     --target-group-arn <target-group-arn> > target-health.json
+
+# Lambda reconciler logs (if configured)
+aws logs tail /aws/lambda/<reconciler-function-name> \
+    --since 1h > lambda-logs.txt
 ```
 
 ### Support Resources
@@ -496,7 +508,7 @@ aws elbv2 describe-target-health \
 ### Useful Commands
 
 ```bash
-# SSH to EC2 instance (if ssh_key_name configured)
+# Connect to EC2 instance via SSM
 INSTANCE_ID=$(aws ec2 describe-instances \
     --filters "Name=tag:Name,Values=pmm-server*" \
               "Name=instance-state-name,Values=running" \
@@ -507,15 +519,13 @@ aws ssm start-session --target "$INSTANCE_ID"
 
 # Check PMM container status
 sudo docker ps
-sudo docker logs <container-id>
+sudo docker logs pmm-server --tail 100
 
-# Check EFS mount
-df -h | grep efs
-sudo mount | grep efs
+# Check EBS mount
+df -h /srv
+mount | grep /srv
 
-# Restart ECS service (last resort)
-aws ecs update-service \
-    --cluster pmm-server \
-    --service pmm-server \
-    --force-new-deployment
+# Check pmm-client on an ASG instance (if reconciler configured)
+sudo pmm-admin status
+sudo pmm-admin list
 ```
