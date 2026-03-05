@@ -201,7 +201,7 @@ resource "aws_route53_record" "pmm" {
 
 # CloudWatch alarms for ALB
 resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
-  alarm_name          = "${local.service_name}-alb-unhealthy-hosts"
+  alarm_name          = "${local.service_name_uid}-alb-unhealthy-hosts"
   alarm_description   = "Alert when PMM instance is unhealthy"
   namespace           = "AWS/ApplicationELB"
   metric_name         = "UnHealthyHostCount"
@@ -228,7 +228,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_target_response_time" {
-  alarm_name          = "${local.service_name}-alb-response-time"
+  alarm_name          = "${local.service_name_uid}-alb-response-time"
   alarm_description   = "Alert when PMM response time is high"
   namespace           = "AWS/ApplicationELB"
   metric_name         = "TargetResponseTime"

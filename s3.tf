@@ -7,7 +7,7 @@ module "alb_logs_bucket" {
   source  = "registry.infrahouse.com/infrahouse/s3-bucket/aws"
   version = "0.3.0"
 
-  bucket_name = "${local.service_name}-alb-logs-${data.aws_caller_identity.current.account_id}"
+  bucket_prefix = "${local.service_name}-alb-logs-"
 
   # ALB logging requires specific bucket policy
   bucket_policy = data.aws_iam_policy_document.alb_logs.json
@@ -30,7 +30,7 @@ data "aws_iam_policy_document" "alb_logs" {
       "s3:PutObject"
     ]
     resources = [
-      "arn:aws:s3:::${local.service_name}-alb-logs-${data.aws_caller_identity.current.account_id}/*"
+      "${module.alb_logs_bucket.bucket_arn}/*"
     ]
   }
 
@@ -45,7 +45,7 @@ data "aws_iam_policy_document" "alb_logs" {
       "s3:GetBucketAcl"
     ]
     resources = [
-      "arn:aws:s3:::${local.service_name}-alb-logs-${data.aws_caller_identity.current.account_id}"
+      module.alb_logs_bucket.bucket_arn
     ]
   }
 }
