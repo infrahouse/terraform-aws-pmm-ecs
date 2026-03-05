@@ -81,7 +81,7 @@ module "admin_password_secret" {
   source  = "registry.infrahouse.com/infrahouse/secret/aws"
   version = "1.1.1"
 
-  secret_name        = "${local.service_name}-admin-password"
+  secret_name        = "${local.service_name_uid}-admin-password"
   secret_description = "PMM admin password for ${local.service_name}"
   secret_value       = random_password.admin.result
   environment        = var.environment

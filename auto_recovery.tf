@@ -5,7 +5,7 @@
 resource "aws_cloudwatch_metric_alarm" "pmm_system_auto_recovery" {
   count = var.enable_auto_recovery ? 1 : 0
 
-  alarm_name          = "${local.service_name}-system-auto-recovery"
+  alarm_name          = "${local.service_name_uid}-system-auto-recovery"
   alarm_description   = "Auto recover PMM instance when underlying hardware fails"
   namespace           = "AWS/EC2"
   metric_name         = "StatusCheckFailed_System"
@@ -34,7 +34,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_system_auto_recovery" {
 # Instance status check alarm - auto-reboots on failure
 # Handles software-level issues: OOM, kernel panics, corrupted state
 resource "aws_cloudwatch_metric_alarm" "pmm_instance_check" {
-  alarm_name          = "${local.service_name}-instance-status-check"
+  alarm_name          = "${local.service_name_uid}-instance-status-check"
   alarm_description   = "Auto-reboot PMM instance when it fails status checks (OOM, kernel panic, software issues)"
   namespace           = "AWS/EC2"
   metric_name         = "StatusCheckFailed_Instance"
@@ -67,7 +67,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_instance_check" {
 
 # Combined status check alarm - alerts on any failure
 resource "aws_cloudwatch_metric_alarm" "pmm_status_check_failed" {
-  alarm_name          = "${local.service_name}-status-check-failed"
+  alarm_name          = "${local.service_name_uid}-status-check-failed"
   alarm_description   = "Alert when PMM instance fails any status check"
   namespace           = "AWS/EC2"
   metric_name         = "StatusCheckFailed"
@@ -97,7 +97,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_status_check_failed" {
 resource "aws_cloudwatch_metric_alarm" "pmm_frequent_reboots" {
   count = var.enable_auto_recovery ? 1 : 0
 
-  alarm_name          = "${local.service_name}-frequent-reboots"
+  alarm_name          = "${local.service_name_uid}-frequent-reboots"
   alarm_description   = "Alert when PMM instance is rebooting too frequently (possible reboot loop)"
   namespace           = "AWS/EC2"
   metric_name         = "StatusCheckFailed_Instance"
@@ -129,7 +129,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_frequent_reboots" {
 resource "aws_cloudwatch_metric_alarm" "pmm_high_memory" {
   count = var.enable_detailed_monitoring ? 1 : 0
 
-  alarm_name          = "${local.service_name}-high-memory"
+  alarm_name          = "${local.service_name_uid}-high-memory"
   alarm_description   = "Alert when PMM instance memory usage is high"
   namespace           = "CWAgent"
   metric_name         = "mem_used_percent"
@@ -158,7 +158,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_high_memory" {
 resource "aws_cloudwatch_metric_alarm" "pmm_root_disk_space" {
   count = var.enable_detailed_monitoring ? 1 : 0
 
-  alarm_name          = "${local.service_name}-root-disk-space"
+  alarm_name          = "${local.service_name_uid}-root-disk-space"
   alarm_description   = "Alert when root volume disk space is low"
   namespace           = "CWAgent"
   metric_name         = "disk_used_percent"
@@ -190,7 +190,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_root_disk_space" {
 resource "aws_cloudwatch_metric_alarm" "pmm_data_disk_space" {
   count = var.enable_detailed_monitoring ? 1 : 0
 
-  alarm_name          = "${local.service_name}-data-disk-space"
+  alarm_name          = "${local.service_name_uid}-data-disk-space"
   alarm_description   = "Alert when data volume disk space is low"
   namespace           = "CWAgent"
   metric_name         = "disk_used_percent"
@@ -222,7 +222,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_data_disk_space" {
 resource "aws_cloudwatch_metric_alarm" "pmm_ebs_burst_balance" {
   count = var.enable_detailed_monitoring && var.ebs_volume_type == "gp3" ? 1 : 0
 
-  alarm_name          = "${local.service_name}-ebs-burst-balance"
+  alarm_name          = "${local.service_name_uid}-ebs-burst-balance"
   alarm_description   = "Alert when EBS volume burst balance is low"
   namespace           = "AWS/EBS"
   metric_name         = "BurstBalance"
@@ -251,7 +251,7 @@ resource "aws_cloudwatch_metric_alarm" "pmm_ebs_burst_balance" {
 resource "aws_cloudwatch_dashboard" "pmm_monitoring" {
   count = var.create_dashboard ? 1 : 0
 
-  dashboard_name = "${local.service_name}-monitoring"
+  dashboard_name = "${local.service_name_uid}-monitoring"
 
   dashboard_body = jsonencode({
     widgets = [

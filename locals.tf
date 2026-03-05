@@ -1,9 +1,14 @@
+resource "random_id" "this" {
+  byte_length = 4
+}
+
 locals {
   module         = "infrahouse/pmm-ecs/aws"
   module_version = "1.1.0"
 
-  service_name = var.service_name
-  docker_image = "percona/pmm-server:${var.pmm_version}"
+  service_name     = var.service_name
+  service_name_uid = "${var.service_name}-${random_id.this.hex}"
+  docker_image     = "percona/pmm-server:${var.pmm_version}"
 
   ubuntu_codename      = "noble"
   ami_name_pattern_pro = "ubuntu-pro-server/images/hvm-ssd-gp3/ubuntu-${local.ubuntu_codename}-*"

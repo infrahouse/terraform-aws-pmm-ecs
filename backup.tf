@@ -3,14 +3,14 @@
 
 # Backup vault for storing snapshots
 resource "aws_backup_vault" "pmm" {
-  name          = "${local.service_name}-backup-vault"
+  name          = "${local.service_name_uid}-backup-vault"
   kms_key_arn   = var.backup_kms_key_id # Note: Despite the variable name, this needs to be an ARN
   force_destroy = var.backup_vault_force_destroy
 
   tags = merge(
     local.common_tags,
     {
-      Name = "${local.service_name}-backup-vault"
+      Name = "${local.service_name_uid}-backup-vault"
       Type = "backup-vault"
     }
   )
@@ -18,7 +18,7 @@ resource "aws_backup_vault" "pmm" {
 
 # Backup plan with daily schedule
 resource "aws_backup_plan" "pmm" {
-  name = "${local.service_name}-backup-plan"
+  name = "${local.service_name_uid}-backup-plan"
 
   rule {
     rule_name         = "daily_backup"
@@ -65,7 +65,7 @@ resource "aws_backup_plan" "pmm" {
   tags = merge(
     local.common_tags,
     {
-      Name = "${local.service_name}-backup-plan"
+      Name = "${local.service_name_uid}-backup-plan"
     }
   )
 }
@@ -104,7 +104,7 @@ resource "aws_iam_role_policy_attachment" "backup_restore" {
 
 # Backup selection - which resources to backup
 resource "aws_backup_selection" "pmm" {
-  name         = "${local.service_name}-backup-selection"
+  name         = "${local.service_name_uid}-backup-selection"
   plan_id      = aws_backup_plan.pmm.id
   iam_role_arn = aws_iam_role.backup.arn
 
@@ -127,7 +127,7 @@ resource "aws_backup_selection" "pmm" {
 resource "aws_cloudwatch_metric_alarm" "backup_failed" {
   count = var.enable_backup_alarms ? 1 : 0
 
-  alarm_name          = "${local.service_name}-backup-failed"
+  alarm_name          = "${local.service_name_uid}-backup-failed"
   alarm_description   = "Alert when PMM backup fails"
   namespace           = "AWS/Backup"
   metric_name         = "NumberOfBackupJobsFailed"

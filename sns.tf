@@ -1,7 +1,7 @@
 # SNS topic for CloudWatch alarms
 
 locals {
-  sns_topic_name = var.sns_topic_name != null ? var.sns_topic_name : "${local.service_name}-alarms"
+  sns_topic_name = var.sns_topic_name != null ? var.sns_topic_name : "${local.service_name_uid}-alarms"
   # Combine email-based topic and external topic ARNs
   all_alarm_targets = concat(
     length(var.alarm_emails) > 0 ? [aws_sns_topic.alarms[0].arn] : [],

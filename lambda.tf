@@ -12,7 +12,7 @@ module "pmm_reconciler" {
   source  = "registry.infrahouse.com/infrahouse/lambda-monitored/aws"
   version = "1.0.4"
 
-  function_name     = "${local.service_name}-asg-reconciler"
+  function_name     = "${local.service_name_uid}-asg-reconciler"
   lambda_source_dir = "${path.module}/lambda/pmm_reconciler"
   handler           = "main.lambda_handler"
   timeout           = 300

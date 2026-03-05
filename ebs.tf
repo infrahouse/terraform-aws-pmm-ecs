@@ -47,7 +47,7 @@ resource "aws_volume_attachment" "pmm_data" {
 resource "aws_cloudwatch_metric_alarm" "ebs_burst_balance" {
   count = var.ebs_volume_type == "gp2" ? 1 : 0
 
-  alarm_name          = "${local.service_name}-ebs-burst-balance"
+  alarm_name          = "${local.service_name_uid}-ebs-burst-balance"
   alarm_description   = "Alert when EBS burst balance is low"
   namespace           = "AWS/EBS"
   metric_name         = "BurstBalance"
@@ -68,7 +68,7 @@ resource "aws_cloudwatch_metric_alarm" "ebs_burst_balance" {
 
 # CloudWatch alarm for EBS volume read/write ops (performance monitoring)
 resource "aws_cloudwatch_metric_alarm" "ebs_high_iops" {
-  alarm_name          = "${local.service_name}-ebs-high-iops"
+  alarm_name          = "${local.service_name_uid}-ebs-high-iops"
   alarm_description   = "Alert when EBS IOPS usage is high"
   namespace           = "AWS/EBS"
   metric_name         = "VolumeReadOps"
