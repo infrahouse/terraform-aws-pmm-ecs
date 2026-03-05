@@ -1,6 +1,6 @@
 module "percona_server" {
-  source  = "infrahouse/percona-server/aws"
-  version = "~> 0.5"
+  source  = "registry.infrahouse.com/infrahouse/percona-server/aws"
+  version = "0.6.0"
 
   cluster_id   = "pmm-test"
   environment  = var.environment

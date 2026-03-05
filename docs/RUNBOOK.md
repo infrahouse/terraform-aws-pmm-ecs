@@ -32,12 +32,9 @@ This runbook provides step-by-step procedures for common operational tasks relat
 3. Click "Retrieve secret value"
 4. Copy the password
 
-**Via AWS CLI**:
+**Via CLI**:
 ```bash
-aws secretsmanager get-secret-value \
-  --secret-id pmm-server-admin-password \
-  --query SecretString \
-  --output text
+ih-secrets get pmm-server-admin-password
 ```
 
 **Via Terraform Output** (if configured):
@@ -53,15 +50,11 @@ terraform output admin_password_secret_arn
 
 **Connect to instance**:
 ```bash
-# Get instance IP
-INSTANCE_IP=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=pmm-server" \
-            "Name=instance-state-name,Values=running" \
-  --query "Reservations[0].Instances[0].PrivateIpAddress" \
-  --output text)
+# Find instance IP
+ih-ec2 list --tags
 
 # SSH (from bastion or VPN)
-ssh ubuntu@$INSTANCE_IP
+ssh ubuntu@<instance-ip>
 ```
 
 ### Changing Admin Password
@@ -77,9 +70,7 @@ ssh ubuntu@$INSTANCE_IP
 NEW_PASSWORD=$(openssl rand -base64 24)
 
 # Update secret
-aws secretsmanager put-secret-value \
-  --secret-id pmm-server-admin-password \
-  --secret-string "$NEW_PASSWORD"
+ih-secrets set pmm-server-admin-password "$NEW_PASSWORD"
 
 # Restart PMM container to pick up new password
 ssh ubuntu@$INSTANCE_IP
@@ -816,9 +807,7 @@ If a service exists in PMM for a terminated instance:
 2. **Via API**:
 ```bash
 # Get admin password
-PMM_PASSWORD=$(aws secretsmanager get-secret-value \
-  --secret-id <admin-password-secret-arn> \
-  --query SecretString --output text)
+PMM_PASSWORD=$(ih-secrets get <admin-password-secret-arn>)
 
 # List services
 curl -s -u admin:$PMM_PASSWORD \
@@ -906,7 +895,7 @@ curl -s -u admin:$PMM_PASSWORD \
 aws ec2 describe-instance-status --instance-ids <id>
 
 # Get admin password
-aws secretsmanager get-secret-value --secret-id pmm-server-admin-password --query SecretString --output text
+ih-secrets get pmm-server-admin-password
 
 # Restart PMM
 ssh ubuntu@<ip> "sudo systemctl restart pmm-server"

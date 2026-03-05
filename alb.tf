@@ -12,6 +12,10 @@ resource "aws_security_group" "pmm_alb" {
       Name = "${local.service_name}-alb"
     }
   )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Allow HTTPS inbound traffic
@@ -56,6 +60,7 @@ resource "aws_lb" "pmm" {
   subnets            = var.public_subnet_ids
 
   enable_deletion_protection       = var.enable_deletion_protection
+  drop_invalid_header_fields       = true
   enable_http2                     = true
   enable_cross_zone_load_balancing = true
 

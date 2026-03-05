@@ -57,4 +57,5 @@ test_output/
 .claude/*.local.json
 .claude/reviews/
 
+# Lambda build directory (created by lambda-monitored module during local tests)
 .build

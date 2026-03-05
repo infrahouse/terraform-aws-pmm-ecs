@@ -156,17 +156,10 @@ openssl s_client -connect pmm.your-domain.com:443 -servername pmm.your-domain.co
 **Resolution**:
 ```bash
 # Retrieve admin password
-aws secretsmanager get-secret-value \
-    --secret-id pmm-server-admin-password \
-    --query SecretString \
-    --output text
+ih-secrets get pmm-server-admin-password
 
 # Or using Terraform output
-terraform output -raw admin_password_secret_arn | \
-    xargs -I {} aws secretsmanager get-secret-value \
-        --secret-id {} \
-        --query SecretString \
-        --output text
+ih-secrets get "$(terraform output -raw admin_password_secret_arn)"
 ```
 
 ## Performance Issues
@@ -508,14 +501,11 @@ aws logs tail /aws/lambda/<reconciler-function-name> \
 ### Useful Commands
 
 ```bash
-# Connect to EC2 instance via SSM
-INSTANCE_ID=$(aws ec2 describe-instances \
-    --filters "Name=tag:Name,Values=pmm-server*" \
-              "Name=instance-state-name,Values=running" \
-    --query 'Reservations[0].Instances[0].InstanceId' \
-    --output text)
+# Find PMM instance
+ih-ec2 list --tags
 
-aws ssm start-session --target "$INSTANCE_ID"
+# Connect to EC2 instance via SSM
+aws ssm start-session --target <instance-id>
 
 # Check PMM container status
 sudo docker ps

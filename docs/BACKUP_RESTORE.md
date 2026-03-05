@@ -378,7 +378,8 @@ Use this for regional disasters or compliance requirements.
    }
 
    module "pmm_dr" {
-     source = "infrahouse/pmm-ecs/aws"
+     source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
+     version = "1.1.0"
 
      # Use DR VPC and subnets
      public_subnet_ids  = ["subnet-dr-public"]
@@ -463,7 +464,8 @@ Perform quarterly tests to validate backup and restore procedures:
    ```hcl
    # test/terraform.tfvars
    module "pmm_test" {
-     source = "infrahouse/pmm-ecs/aws"
+     source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
+     version = "1.1.0"
 
      environment        = "dr-test"
      service_name       = "pmm-server-test"

@@ -7,19 +7,22 @@ for terminated instances via the PMM HTTP API.
 """
 
 import json
-import logging
 import os
 from base64 import b64encode
+from logging import getLogger
 from textwrap import dedent
 from typing import Dict, List, Tuple
 
 import requests
 from infrahouse_core.aws.asg import ASG
+from infrahouse_core.logging import setup_logging
 from infrahouse_core.aws.asg_instance import ASGInstance
 from infrahouse_core.aws.secretsmanager import Secret
 
-LOG = logging.getLogger(__name__)
-LOG.setLevel(logging.INFO)
+LOG = getLogger(__name__)
+
+setup_logging(LOG)
+
 
 PMM_HOST = os.environ.get("PMM_HOST", "")
 PMM_ADMIN_SECRET_ARN = os.environ.get("PMM_ADMIN_SECRET_ARN", "")
@@ -142,6 +145,13 @@ def ensure_pmm_client(
     :param service_name: Service name for PMM (e.g., ``asg-name/hostname``).
     :param existing_service_id: PMM service ID if already registered on server.
     """
+    # The PMM admin password is embedded in the script via f-string.
+    # Alternatives (SSM env vars, Secrets Manager on instance) were
+    # considered but either are not supported by SSM SendCommand or
+    # would grant every ASG instance access to the PMM admin secret.
+    # Current mitigations: base64-encoded, umask 077, immediate cleanup.
+    # The password does appear in SSM command history, which is an
+    # inherent trade-off of any SSM-based approach.
     script = dedent(
         f"""\
         #!/bin/bash
@@ -182,13 +192,20 @@ def ensure_pmm_client(
             CREDS_SECRET=$(facter -p percona.credentials_secret)
             DB_PASSWORD=$(ih-secrets get "$CREDS_SECRET" | jq -r '.{_shell_escape(db_username)}')
             echo 'Adding MySQL monitoring...'
-            pmm-admin add mysql \
+            ADD_OUTPUT=$(pmm-admin add mysql \
                 --username='{_shell_escape(db_username)}' \
                 --password="$DB_PASSWORD" \
                 --host=127.0.0.1 \
                 --port={port} \
                 --query-source=perfschema \
-                --service-name='{_shell_escape(service_name)}'
+                --service-name='{_shell_escape(service_name)}' 2>&1) || {{
+                if echo "$ADD_OUTPUT" | grep -q "already exists"; then
+                    echo 'MySQL monitoring already registered'
+                else
+                    echo "$ADD_OUTPUT"
+                    exit 1
+                fi
+            }}
             echo 'MySQL monitoring added'
         fi
 
@@ -414,4 +431,11 @@ def lambda_handler(event: Dict, context: object) -> Dict:
         "errors": errors,
     }
     LOG.info("Reconciliation complete: %s", json.dumps(result))
+
+    if errors:
+        raise RuntimeError(
+            f"Reconciliation failed for {len(errors)} ASG(s): "
+            + "; ".join(errors)
+        )
+
     return result
