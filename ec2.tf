@@ -56,23 +56,22 @@ resource "aws_instance" "pmm_server" {
   }
 }
 
+data "aws_iam_policy_document" "pmm_instance_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
 # IAM role for EC2 instance
 resource "aws_iam_role" "pmm_instance" {
   name_prefix = "${local.service_name}-instance-"
   description = "IAM role for PMM EC2 instance"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
-  })
+  assume_role_policy = data.aws_iam_policy_document.pmm_instance_assume.json
 
   tags = local.common_tags
 }
