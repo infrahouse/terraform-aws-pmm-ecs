@@ -70,23 +70,22 @@ resource "aws_backup_plan" "pmm" {
   )
 }
 
+data "aws_iam_policy_document" "backup_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["backup.amazonaws.com"]
+    }
+  }
+}
+
 # IAM role for AWS Backup
 resource "aws_iam_role" "backup" {
   name_prefix = "${local.service_name}-backup-"
   description = "IAM role for AWS Backup to manage PMM snapshots"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "backup.amazonaws.com"
-        }
-      }
-    ]
-  })
+  assume_role_policy = data.aws_iam_policy_document.backup_assume.json
 
   tags = local.common_tags
 }
