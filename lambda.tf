@@ -154,7 +154,6 @@ data "aws_iam_policy_document" "reconciler" {
     }
   }
 
-
   # ssm:GetCommandInvocation does not support resource-level permissions.
   # AWS requires resource = "*". See:
   # https://docs.aws.amazon.com/service-authorization/latest/reference/list_awssystemsmanager.html
