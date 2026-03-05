@@ -346,15 +346,15 @@ Use with the [terraform-aws-percona-server](https://github.com/infrahouse/terraf
 
 ```hcl
 module "percona" {
-  source  = "infrahouse/percona-server/aws"
-  version = "..."
+  source  = "registry.infrahouse.com/infrahouse/percona-server/aws"
+  version = "0.5.0"
 
   # ... Percona Server configuration ...
 }
 
 module "pmm" {
   source  = "infrahouse/pmm-ecs/aws"
-  version = "..."
+  version = "1.1.0"
 
   # ... other PMM configuration ...
 
@@ -392,7 +392,7 @@ certificate with `--server-insecure-tls`.
 After the Lambda runs, the PMM Inventory will show services named
 `{asg_name}/{hostname}` for each ASG instance:
 
-![PMM Inventory showing Percona Server ASG services](docs/images/Screenshot%202026-03-04%20211115.png)
+![PMM Inventory showing Percona Server ASG services](docs/images/pmm-inventory-services.png)
 
 Check pmm-client status on an ASG instance:
 

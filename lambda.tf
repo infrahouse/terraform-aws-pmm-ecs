@@ -50,6 +50,10 @@ resource "aws_security_group" "reconciler_lambda" {
       Name = "${local.service_name}-reconciler"
     }
   )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Allow Lambda to reach PMM instance on port 80
@@ -108,6 +112,7 @@ resource "aws_security_group_rule" "pmm_from_monitored_asg" {
 data "aws_iam_policy_document" "reconciler" {
   count = local.create_reconciler ? 1 : 0
 
+  # Describe actions do not support resource-level permissions per AWS docs.
   statement {
     effect = "Allow"
     actions = [
@@ -131,10 +136,28 @@ data "aws_iam_policy_document" "reconciler" {
     ]
     resources = [
       "arn:aws:ssm:${data.aws_region.current.name}::document/AWS-RunShellScript",
-      "arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:instance/*",
     ]
   }
 
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:SendCommand",
+    ]
+    resources = [
+      "arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:instance/*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "ssm:resourceTag/aws:autoscaling:groupName"
+      values   = [for asg in var.monitored_asgs : asg.asg_name]
+    }
+  }
+
+
+  # ssm:GetCommandInvocation does not support resource-level permissions.
+  # AWS requires resource = "*". See:
+  # https://docs.aws.amazon.com/service-authorization/latest/reference/list_awssystemsmanager.html
   statement {
     effect = "Allow"
     actions = [

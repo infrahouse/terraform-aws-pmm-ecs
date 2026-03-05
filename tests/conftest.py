@@ -55,7 +55,7 @@ def percona_server(request, service_network, keep_after, aws_region, test_role_a
                   required_providers {
                     aws = {
                       source  = "hashicorp/aws"
-                      version = "~> 5.31"
+                      version = "~> 6.0"
                     }
                   }
                 }
@@ -254,7 +254,7 @@ def configure_postgres_via_ssm(
         LOG.error("Failed to install python3-psycopg2")
         LOG.error("STDOUT: %s", stdout)
         LOG.error("STDERR: %s", stderr)
-        raise Exception(
+        raise RuntimeError(
             f"Installation failed - 'Installation complete' marker not found"
         )
 
@@ -367,7 +367,7 @@ PYTHON_SCRIPT_EOF
             LOG.error("Error output:")
             for line in stderr.strip().split("\n"):
                 LOG.error("  %s", line)
-        raise Exception(f"PostgreSQL configuration failed with exit code {exit_code}")
+        raise RuntimeError(f"PostgreSQL configuration failed with exit code {exit_code}")
 
     LOG.info("=" * 80)
     LOG.info("PostgreSQL successfully configured for PMM monitoring")

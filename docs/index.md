@@ -23,12 +23,37 @@ on AWS EC2 with Docker.
 - **Auto-generated passwords** stored securely in AWS Secrets Manager
 - **PMM 3.x by default** (PMM 2 EOL July 2025)
 
+## Prerequisites
+
+The operational documentation uses CLI tools from
+[infrahouse-toolkit](https://github.com/infrahouse/infrahouse-toolkit)
+(`ih-secrets`, `ih-ec2`, etc.). Install it on Ubuntu:
+
+```bash
+# Install dependencies
+apt-get update
+apt-get install gpg lsb-release curl
+
+# Add InfraHouse GPG key
+mkdir -p /etc/apt/cloud-init.gpg.d/
+curl -fsSL https://release-$(lsb_release -cs).infrahouse.com/DEB-GPG-KEY-release-$(lsb_release -cs).infrahouse.com \
+    | gpg --dearmor -o /etc/apt/cloud-init.gpg.d/infrahouse.gpg
+
+# Add InfraHouse repository
+echo "deb [signed-by=/etc/apt/cloud-init.gpg.d/infrahouse.gpg] https://release-$(lsb_release -cs).infrahouse.com/ $(lsb_release -cs) main" \
+    > /etc/apt/sources.list.d/infrahouse.list
+
+# Install
+apt-get update
+apt-get install infrahouse-toolkit
+```
+
 ## Quick Start
 
 ```hcl
 module "pmm" {
-  source  = "infrahouse/pmm-ecs/aws"
-  version = "..."
+  source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
+  version = "1.1.0"
 
   providers = {
     aws     = aws
@@ -51,10 +76,7 @@ After deployment, PMM is available at `https://pmm.<your-zone>/`.
 Retrieve the admin password:
 
 ```bash
-aws secretsmanager get-secret-value \
-  --secret-id <admin_password_secret_arn from module output> \
-  --query SecretString \
-  --output text
+ih-secrets get <admin_password_secret_arn from module output>
 ```
 
 ## Monitoring Percona Server ASG Instances
@@ -66,14 +88,14 @@ instances.
 
 ```hcl
 module "percona" {
-  source  = "infrahouse/percona-server/aws"
-  version = "..."
+  source  = "registry.infrahouse.com/infrahouse/percona-server/aws"
+  version = "0.6.0"
   # ...
 }
 
 module "pmm" {
-  source  = "infrahouse/pmm-ecs/aws"
-  version = "..."
+  source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
+  version = "1.1.0"
 
   # ... other configuration ...
 
@@ -89,7 +111,9 @@ module "pmm" {
 }
 ```
 
-![PMM Inventory showing Percona Server ASG services](images/Screenshot%202026-03-04%20211115.png)
+![PMM Inventory showing Percona Server ASG services](images/pmm-inventory-services.png)
+
+![PMM Node Summary dashboard](images/pmm-node-summary.png)
 
 ## Documentation
 

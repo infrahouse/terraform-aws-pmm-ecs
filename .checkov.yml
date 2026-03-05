@@ -1,0 +1,68 @@
+# Checkov configuration for terraform-aws-pmm-ecs module
+
+framework:
+  - terraform
+
+skip-path:
+  - test_data
+  - .terraform
+  - .venv
+  - examples
+
+skip-check:
+  # CKV_TF_1: Module sources use version pins from private registry (registry.infrahouse.com)
+  # InfraHouse standard: exact version pinning from registry.infrahouse.com,
+  # which provides better maintainability than commit hash pinning.
+  # Renovate manages version updates via individual PRs for explicit review.
+  - CKV_TF_1
+
+  # CKV_TF_2: Module sources use private registry (registry.infrahouse.com)
+  # Same rationale as CKV_TF_1 - private registry with exact version pinning.
+  - CKV_TF_2
+
+  # CKV_AWS_150: ALB deletion protection disabled by default for Terraform manageability
+  # Configurable via var.enable_deletion_protection. Disabled by default to allow
+  # terraform destroy in dev/test environments. Production environments should
+  # set enable_deletion_protection = true.
+  - CKV_AWS_150
+
+  # CKV_AWS_158: CloudWatch Logs use AWS-managed encryption
+  # AWS-managed encryption at rest is the InfraHouse standard.
+  # CMK is only required for CloudTrail per security policy.
+  - CKV_AWS_158
+
+  # CKV_AWS_277: Egress security group rules allow 0.0.0.0/0
+  # EC2 instance and Lambda require outbound internet access via NAT gateway
+  # for Docker Hub pulls, AWS API calls, and package updates.
+  - CKV_AWS_277
+
+  # CKV_AWS_382: Security groups allow egress to 0.0.0.0/0 on all ports
+  # ALB, EC2, and Lambda security groups need unrestricted outbound access
+  # for health checks, Docker Hub, AWS APIs, and package updates via NAT.
+  - CKV_AWS_382
+
+  # CKV_AWS_260: Security group allows ingress from 0.0.0.0/0 on HTTP/HTTPS
+  # ALB ingress is controlled by var.allowed_cidr_blocks (defaults to VPC CIDR).
+  # Public ALBs intentionally accept traffic from allowed CIDRs.
+  - CKV_AWS_260
+
+  # CKV2_AWS_28: WAF association belongs at the consumer/environment level
+  # WAF rules are application- and environment-specific. Module consumers
+  # can attach WAF via aws_wafv2_web_acl_association on the ALB ARN output.
+  - CKV2_AWS_28
+
+  # CKV2_AWS_5: Security group attached via module reference
+  # reconciler_lambda security group is passed to module.pmm_reconciler via
+  # security_group_ids. Checkov cannot trace references through module boundaries.
+  - CKV2_AWS_5
+
+  # CKV_AWS_290/CKV_AWS_355: IAM policies use wildcard (*) resource for
+  # describe/list actions that don't support resource-level restrictions.
+  # autoscaling:DescribeAutoScalingGroups, ec2:DescribeInstances,
+  # ssm:GetCommandInvocation, and cloudwatch:PutMetricData all require
+  # resource = "*" per AWS documentation.
+  - CKV_AWS_290
+  - CKV_AWS_355
+
+compact: true
+quiet: false

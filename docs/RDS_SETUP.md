@@ -26,7 +26,8 @@ Add RDS security group IDs to the PMM module:
 
 ```hcl
 module "pmm" {
-  source = "infrahouse/pmm-ecs/aws"
+  source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
+  version = "1.1.0"
 
   # ... other configuration ...
 
@@ -86,17 +87,11 @@ track_functions = all
 
 ```bash
 # Get admin password from Secrets Manager
-PMM_PASSWORD=$(aws secretsmanager get-secret-value \
-    --secret-id pmm-server-admin-password \
-    --query SecretString \
-    --output text)
+PMM_PASSWORD=$(ih-secrets get pmm-server-admin-password)
 
 # Or use the Terraform output
 PMM_SECRET_ARN=$(terraform output -raw admin_password_secret_arn)
-PMM_PASSWORD=$(aws secretsmanager get-secret-value \
-    --secret-id "$PMM_SECRET_ARN" \
-    --query SecretString \
-    --output text)
+PMM_PASSWORD=$(ih-secrets get "$PMM_SECRET_ARN")
 ```
 
 ## Step 4: Add RDS Instance to PMM
@@ -169,6 +164,8 @@ You should see:
 - Query performance metrics
 - Buffer cache statistics
 - Replication lag (if applicable)
+
+![PostgreSQL instance overview dashboard](images/pmm-postgresql-instance-overview.png)
 
 ## Advanced Configuration
 

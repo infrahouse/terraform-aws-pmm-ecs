@@ -8,7 +8,8 @@ resource "aws_instance" "pmm_server" {
   iam_instance_profile   = aws_iam_instance_profile.pmm.name
 
   # Enable detailed monitoring for auto-recovery
-  monitoring = true
+  monitoring    = true
+  ebs_optimized = true
 
   # Root volume configuration
   # Size is automatically calculated: OS (10GB) + Swap (1x RAM) + Buffer (5GB)
@@ -108,6 +109,10 @@ resource "aws_security_group" "pmm_instance" {
       Name = "${local.service_name}-instance"
     }
   )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Allow egress to the internet

@@ -55,15 +55,15 @@ instance on port 443 using a self-signed certificate
 
 ```hcl
 module "percona" {
-  source  = "infrahouse/percona-server/aws"
-  version = "..."
+  source  = "registry.infrahouse.com/infrahouse/percona-server/aws"
+  version = "0.6.0"
 
   # ... Percona Server configuration ...
 }
 
 module "pmm" {
-  source  = "infrahouse/pmm-ecs/aws"
-  version = "..."
+  source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
+  version = "1.1.0"
 
   providers = {
     aws     = aws
@@ -154,14 +154,22 @@ sudo pmm-admin status
 Navigate to **Configuration** > **Inventory** > **Services**. You should see
 services named `{asg_name}/{hostname}` for each ASG instance:
 
-![PMM Inventory showing Percona Server services](images/Screenshot%202026-03-04%20211115.png)
+![PMM Inventory showing Percona Server services](images/pmm-inventory-services.png)
 
 Each instance provides:
 
 - **OS metrics**: CPU, memory, disk, network (via `node_exporter`)
+
+![Node OS overview dashboard](images/pmm-node-os-overview.png)
+
 - **MySQL metrics**: queries, connections, InnoDB, replication (via
   `mysqld_exporter`)
+
+![MySQL instance overview dashboard](images/pmm-mysql-instance-overview.png)
+
 - **Query Analytics**: slow queries, query patterns (via `perfschema`)
+
+![PMM Query Analytics dashboard](images/pmm-query-analytics.png)
 
 ## What the Lambda Installs
 

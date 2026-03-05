@@ -208,7 +208,7 @@ def add_postgres_to_pmm(
     # Get PMM agent ID (required for adding services)
     pmm_agent_id = get_pmm_server_agent_id(pmm_url, auth_header)
     if not pmm_agent_id:
-        raise Exception("Could not find PMM agent ID")
+        raise RuntimeError("Could not find PMM agent ID")
 
     # PMM 3 API: POST /v1/management/services with inline node creation
     add_service_url = f"{pmm_url}/v1/management/services"
@@ -261,7 +261,7 @@ def add_postgres_to_pmm(
             LOG.error("PMM API error details: %s", json.dumps(error_detail, indent=2))
         except Exception:
             LOG.error("PMM API error response: %s", service_response.text)
-        raise Exception(
+        raise RuntimeError(
             f"Failed to add PostgreSQL service: {e}. "
             f"Response: {service_response.text[:500]}"
         )
