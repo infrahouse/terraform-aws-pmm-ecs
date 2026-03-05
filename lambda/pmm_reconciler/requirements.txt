@@ -1,0 +1,2 @@
+infrahouse-core ~= 0.23
+requests ~= 2.32

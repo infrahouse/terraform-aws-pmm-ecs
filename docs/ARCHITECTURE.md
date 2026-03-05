@@ -165,6 +165,51 @@ PMM stores metrics data locally, and running multiple instances would cause data
 - SNS topic created with email subscriptions
 - Additional SNS topics via `alarm_topic_arns`
 
+### 8. Lambda ASG Reconciler (Optional)
+
+- **Purpose**: Automatically installs `pmm-client` on Auto Scaling Group instances
+  and removes services for terminated instances
+- **Trigger**: EventBridge schedule (every 5 minutes)
+- **Created when**: `var.monitored_asgs` is non-empty
+
+**How it works**:
+
+1. Lambda queries ASG for current InService instances
+2. Queries PMM API for existing services (named `{asg_name}/{hostname}`)
+3. For **new** instances: runs idempotent bash script via SSM to install
+   pmm-client, configure PMM connection, and add MySQL monitoring
+4. For **terminated** instances: removes service via PMM HTTP API
+5. For **existing** instances: skips (script is idempotent)
+
+**Key design decisions**:
+
+- **SSM-based installation**: pmm-client is installed remotely via
+  `ASGInstance.execute_command()` (SSM RunShellScript). This avoids making
+  the Percona Server module PMM-aware.
+- **Direct gRPC connection**: pmm-agent uses gRPC (HTTP/2) which is NOT
+  supported by ALB (returns HTTP 464). The agent connects directly to the
+  PMM EC2 instance on port 443 with `--server-insecure-tls` (self-signed cert).
+- **Idempotent script**: The bash script checks each step before executing
+  (dpkg check, `pmm-admin status`, `pmm-admin status | grep mysqld_exporter`).
+- **Stale service cleanup**: If `pmm-admin add mysql` fails with
+  "already exists" (from a previous registration), the Lambda removes the
+  stale service via PMM API with `force=true` and retries.
+
+**Security groups**:
+
+- Lambda SG → PMM instance: port 80 (egress, for PMM HTTP API)
+- Lambda SG → 0.0.0.0/0: port 443 (egress, for AWS APIs via NAT)
+- PMM instance ← Lambda SG: port 80 (ingress)
+- PMM instance ← monitored ASG SGs: port 443 (ingress, for pmm-agent gRPC)
+
+**IAM permissions**:
+
+- `autoscaling:DescribeAutoScalingGroups` - discover ASG instances
+- `ec2:DescribeInstances` - get instance details
+- `ssm:SendCommand` - run scripts on instances
+- `ssm:GetCommandInvocation` - read script output
+- `secretsmanager:GetSecretValue` - read PMM admin password
+
 ## Network Architecture
 
 ```
@@ -190,8 +235,12 @@ Internet
                          │      ├─── CloudWatch Agent
                          │      └─── EBS Data Volume (/srv, 100GB GP3)
                          │
-                         └─── RDS Instances (Optional Monitoring)
-                               └─── PostgreSQL/MySQL databases
+                         ├─── RDS Instances (Optional Monitoring)
+                         │      └─── PostgreSQL/MySQL databases
+                         │
+                         └─── Percona Server ASG Instances (Optional)
+                               ├─── pmm-client → PMM EC2:443 (gRPC, direct)
+                               └─── Lambda reconciler installs via SSM
 ```
 
 ## Security Architecture
@@ -213,6 +262,14 @@ Internet
    - Port: 5432 (PostgreSQL) or 3306 (MySQL)
    - Automatically configured via `rds_security_group_ids` variable
 
+4. **Lambda Reconciler Security Group** (when `monitored_asgs` configured):
+   - Outbound: HTTP (80) to PMM instance security group (API calls)
+   - Outbound: HTTPS (443) to 0.0.0.0/0 (AWS APIs via NAT)
+
+5. **Monitored ASG Instances** (when `monitored_asgs` configured):
+   - Inbound on PMM instance SG: port 443 from each ASG's security group
+     (pmm-agent gRPC connection, direct to EC2, bypasses ALB)
+
 ### IAM Security
 
 **EC2 Instance IAM Role**:
@@ -221,6 +278,12 @@ Internet
 - **CloudWatch**: PutMetricData (for CloudWatch Agent metrics)
 - **SSM**: GetParameter, DescribeParameters (for CloudWatch Agent config)
 - **EC2**: DescribeVolumes, DescribeTags (for EBS volume identification)
+
+**Lambda Reconciler IAM Role** (when `monitored_asgs` configured):
+- **ASG**: DescribeAutoScalingGroups
+- **EC2**: DescribeInstances
+- **SSM**: SendCommand, GetCommandInvocation (run scripts on instances)
+- **Secrets Manager**: GetSecretValue for PMM admin password
 
 **AWS Backup Service Role**:
 - AWS-managed policy: `AWSBackupServiceRolePolicyForBackup`
@@ -232,11 +295,21 @@ Internet
 
 ### Metrics Collection
 
-1. **PMM Clients** → PMM Server (HTTP/HTTPS, Push or Pull)
-2. **PMM Server** → Prometheus/VictoriaMetrics (Internal)
-3. **Prometheus** → EBS Volume (`/srv/prometheus` or `/srv/victoriametrics`)
-4. **Query Analytics** → EBS Volume (`/srv/clickhouse`)
-5. **Grafana Dashboards** → EBS Volume (`/srv/grafana`)
+1. **RDS/External PMM Clients** → PMM Server via ALB (HTTPS:443)
+2. **ASG pmm-client instances** → PMM EC2 directly (gRPC over HTTPS:443,
+   self-signed cert, bypasses ALB because ALB doesn't support gRPC/HTTP2)
+3. **PMM Server** → Prometheus/VictoriaMetrics (Internal)
+4. **Prometheus** → EBS Volume (`/srv/prometheus` or `/srv/victoriametrics`)
+5. **Query Analytics** → EBS Volume (`/srv/clickhouse`)
+6. **Grafana Dashboards** → EBS Volume (`/srv/grafana`)
+
+### ASG Reconciliation (when configured)
+
+1. EventBridge → Triggers Lambda every 5 minutes
+2. Lambda → Reads ASG membership and PMM services
+3. Lambda → SSM RunShellScript on new instances (install pmm-client)
+4. pmm-client → Connects to PMM EC2:443 (gRPC, `--server-insecure-tls`)
+5. Lambda → PMM HTTP API to remove services for terminated instances
 
 ### User Access
 

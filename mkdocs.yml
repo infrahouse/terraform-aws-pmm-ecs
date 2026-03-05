@@ -1,4 +1,4 @@
-site_name: InfraHouse terraform-aws-pmm-ecs
+site_name: InfraHouse PMM
 site_url: https://infrahouse.github.io/terraform-aws-pmm-ecs/
 site_description: Terraform module documentation
 site_author: InfraHouse
@@ -36,6 +36,12 @@ theme:
 
 nav:
   - Home: index.md
+  - Architecture: ARCHITECTURE.md
+  - RDS Setup: RDS_SETUP.md
+  - Percona Server Setup: PERCONA_SERVER_SETUP.md
+  - Backup & Restore: BACKUP_RESTORE.md
+  - Runbook: RUNBOOK.md
+  - Troubleshooting: TROUBLESHOOTING.md
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -61,6 +67,7 @@ markdown_extensions:
 
 plugins:
   - search
+  - glightbox
   - minify:
       minify_html: true
 

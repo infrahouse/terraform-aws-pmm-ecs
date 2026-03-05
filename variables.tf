@@ -408,6 +408,49 @@ variable "secret_readers" {
   default     = []
 }
 
+# ASG monitoring
+variable "monitored_asgs" {
+  description = <<-EOF
+    List of Auto Scaling Groups to monitor in PMM.
+    When non-empty, creates a Lambda function that periodically reconciles
+    ASG membership with PMM monitored services -- adding new instances
+    and removing terminated ones.
+
+    Each entry requires:
+    - asg_name: Name of the Auto Scaling Group (not ARN)
+    - service_type: Type of database service ("mysql")
+    - port: Database port number (e.g., 3306)
+    - username: Key in the instance's credentials secret JSON to look up
+      the password (the instance reads its own secret via Puppet facts
+      and ih-secrets)
+    - security_group_id: Security group ID of the ASG instances (used to
+      create ingress rules allowing pmm-agent to reach the PMM server
+      on port 443 for gRPC)
+  EOF
+  type = list(object({
+    asg_name          = string
+    service_type      = string
+    port              = number
+    username          = string
+    security_group_id = string
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for asg in var.monitored_asgs : contains(["mysql"], asg.service_type)
+    ])
+    error_message = "service_type must be one of: mysql"
+  }
+
+  validation {
+    condition = alltrue([
+      for asg in var.monitored_asgs : asg.port >= 1 && asg.port <= 65535
+    ])
+    error_message = "port must be between 1 and 65535"
+  }
+}
+
 # Tags
 variable "tags" {
   description = "Tags to apply to all resources"

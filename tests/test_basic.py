@@ -13,6 +13,8 @@ import requests
 from infrahouse_core.timeout import timeout
 from pytest_infrahouse import terraform_apply
 
+from infrahouse_core.aws.asg import ASG
+
 from tests.conftest import (
     TERRAFORM_ROOT_DIR,
     LOG,
@@ -70,12 +72,13 @@ def validate_backup_creation(
 
                 if status == "COMPLETED":
                     recovery_point_arn = job["RecoveryPointArn"]
-                    LOG.info("✓ Backup completed successfully!")
+                    LOG.info("Backup completed successfully!")
                     LOG.info("Recovery point: %s", recovery_point_arn)
                     return
                 elif status in ["FAILED", "ABORTED", "EXPIRED"]:
                     LOG.error(
-                        "Backup job details: %s", json.dumps(job, indent=2, default=str)
+                        "Backup job details: %s",
+                        json.dumps(job, indent=2, default=str),
                     )
                     pytest.fail(f"Backup job failed with status: {status}")
 
@@ -210,9 +213,6 @@ def add_postgres_to_pmm(
     # PMM 3 API: POST /v1/management/services with inline node creation
     add_service_url = f"{pmm_url}/v1/management/services"
 
-    # Prepare the payload with inline node creation
-    # Note: Using NODE_TYPE_REMOTE_NODE instead of NODE_TYPE_REMOTE_RDS_NODE
-    # because add_node only supports generic remote nodes
     service_payload = {
         "postgresql": {
             "service_name": service_name,
@@ -223,9 +223,9 @@ def add_postgres_to_pmm(
             "password": postgres_password,
             "pmm_agent_id": pmm_agent_id,
             "qan_postgresql_pgstatements_agent": True,
-            "skip_connection_check": False,  # Re-enable connection check now that we have TLS
-            "tls": True,  # RDS requires SSL/TLS
-            "tls_skip_verify": True,  # Skip certificate verification (no CA cert configured)
+            "skip_connection_check": False,
+            "tls": True,
+            "tls_skip_verify": True,
             "add_node": {
                 "node_type": "NODE_TYPE_REMOTE_NODE",
                 "node_name": f"{service_name}-node",
@@ -244,7 +244,6 @@ def add_postgres_to_pmm(
         timeout=30,
     )
 
-    # Log response details for debugging
     LOG.debug("Response status: %d", service_response.status_code)
     LOG.debug("Response body: %s", service_response.text[:1000])
 
@@ -257,125 +256,14 @@ def add_postgres_to_pmm(
         )
         return service_data
     except requests.exceptions.HTTPError as e:
-        # Log the detailed error message from PMM
         try:
             error_detail = service_response.json()
             LOG.error("PMM API error details: %s", json.dumps(error_detail, indent=2))
-        except:
+        except Exception:
             LOG.error("PMM API error response: %s", service_response.text)
         raise Exception(
-            f"Failed to add PostgreSQL service: {e}. Response: {service_response.text[:500]}"
-        )
-
-
-def check_mysql_in_pmm(pmm_url, auth_header, mysql_address):
-    """Check if a MySQL instance is already monitored in PMM."""
-    services = list_pmm_services(pmm_url, auth_header)
-    if not services:
-        return False
-
-    for service in services.get("services", []):
-        service_type = service.get("service_type", "").upper()
-        service_address = service.get("address", "")
-
-        if (
-            service_type in ("MYSQL_SERVICE", "MYSQL")
-            and mysql_address in service_address
-        ):
-            LOG.info(
-                "MySQL instance already registered: %s",
-                service.get("service_name"),
-            )
-            return True
-    return False
-
-
-def add_mysql_to_pmm(
-    pmm_url,
-    auth_header,
-    mysql_address,
-    mysql_port,
-    mysql_username,
-    mysql_password,
-    service_name="test-mysql-percona",
-    node_id=None,
-):
-    """
-    Add MySQL instance to PMM monitoring using PMM 3 API.
-
-    :param pmm_url: PMM server URL
-    :param auth_header: Authentication header dict
-    :param mysql_address: MySQL hostname
-    :param mysql_port: MySQL port
-    :param mysql_username: MySQL username
-    :param mysql_password: MySQL password
-    :param service_name: Name for the service in PMM
-    :param node_id: Existing PMM node ID to reuse (skips add_node)
-    :return: API response data
-    """
-    pmm_agent_id = get_pmm_server_agent_id(pmm_url, auth_header)
-    if not pmm_agent_id:
-        raise Exception("Could not find PMM agent ID")
-
-    add_service_url = f"{pmm_url}/v1/management/services"
-
-    mysql_params = {
-        "service_name": service_name,
-        "address": mysql_address,
-        "port": int(mysql_port),
-        "username": mysql_username,
-        "password": mysql_password,
-        "pmm_agent_id": pmm_agent_id,
-        "qan_mysql_perfschema": True,
-        "skip_connection_check": False,
-    }
-
-    if node_id:
-        mysql_params["node_id"] = node_id
-    else:
-        mysql_params["add_node"] = {
-            "node_type": "NODE_TYPE_REMOTE_NODE",
-            "node_name": f"{service_name}-node",
-            "region": os.environ.get("AWS_DEFAULT_REGION", "us-west-2"),
-        }
-
-    service_payload = {"mysql": mysql_params}
-
-    LOG.info("Adding MySQL service to PMM...")
-    LOG.debug("Payload: %s", json.dumps(service_payload, indent=2))
-
-    response = requests.post(
-        add_service_url,
-        headers={
-            **auth_header,
-            "Content-Type": "application/json",
-        },
-        json=service_payload,
-        timeout=30,
-    )
-
-    LOG.debug("Response status: %d", response.status_code)
-    LOG.debug("Response body: %s", response.text[:1000])
-
-    try:
-        response.raise_for_status()
-        data = response.json()
-        LOG.info(
-            "MySQL service added successfully: %s",
-            json.dumps(data, indent=2),
-        )
-        return data
-    except requests.exceptions.HTTPError as e:
-        try:
-            error_detail = response.json()
-            LOG.error(
-                "PMM API error details: %s",
-                json.dumps(error_detail, indent=2),
-            )
-        except ValueError:
-            LOG.error("PMM API error response: %s", response.text)
-        raise Exception(
-            f"Failed to add MySQL service: {e}. " f"Response: {response.text[:500]}"
+            f"Failed to add PostgreSQL service: {e}. "
+            f"Response: {service_response.text[:500]}"
         )
 
 
@@ -389,7 +277,7 @@ def test_module(
     test_role_arn,
     aws_region,
     subzone,
-    postgres_pmm,
+    postgres,
     percona_pmm,
     boto3_session,
 ):
@@ -413,8 +301,6 @@ def test_module(
         os.remove(osp.join(terraform_module_dir, ".terraform.lock.hcl"))
     except FileNotFoundError:
         pass
-
-    print(json.dumps(postgres_pmm, indent=4))
 
     # Create terraform.tf with AWS provider
     with open(osp.join(terraform_module_dir, "terraform.tf"), "w") as tf_fp:
@@ -472,7 +358,15 @@ def test_module(
                 )
             )
 
-    # Create terraform.tfvars with test values
+    # Create terraform.tfvars with test values.
+    # Escape postgres_password for HCL: \->\\, "->\" , ${->$${ , %{->%%{
+    pg_pass = postgres["master_password"]["value"]
+    pg_pass_escaped = (
+        pg_pass.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("${", "$${")
+        .replace("%{", "%%{")
+    )
     with open(osp.join(terraform_module_dir, "terraform.tfvars"), "w") as fp:
         fp.write(
             dedent(
@@ -487,20 +381,17 @@ def test_module(
                 environment = "test"
 
                 # Pass postgres fixture outputs
-                postgres_security_group_id = "{postgres_pmm["security_group_id"]["value"]}"
-                postgres_endpoint = "{postgres_pmm["endpoint"]["value"]}"
-                postgres_address = "{postgres_pmm["address"]["value"]}"
-                postgres_port = {postgres_pmm["port"]["value"]}
-                postgres_database = "{postgres_pmm["database_name"]["value"]}"
-                postgres_username = "{postgres_pmm["master_username"]["value"]}"
-                postgres_password = "{postgres_pmm["master_password"]["value"]}"
+                postgres_security_group_id = "{postgres["security_group_id"]["value"]}"
+                postgres_endpoint = "{postgres["endpoint"]["value"]}"
+                postgres_address = "{postgres["address"]["value"]}"
+                postgres_port = {postgres["port"]["value"]}
+                postgres_database = "{postgres["database_name"]["value"]}"
+                postgres_username = "{postgres["master_username"]["value"]}"
+                postgres_password = "{pg_pass_escaped}"
 
                 # Pass MySQL fixture outputs
                 mysql_security_group_id = "{percona_pmm["security_group_id"]}"
-                mysql_address = "{percona_pmm["address"]}"
-                mysql_port = {percona_pmm["port"]}
-                mysql_username = "{percona_pmm["username"]}"
-                mysql_password = "{percona_pmm["password"]}"
+                mysql_asg_name = "{percona_pmm["asg_name"]}"
                 """
             )
         )
@@ -557,11 +448,11 @@ def test_module(
             instance_id=instance_id,
             aws_region=aws_region,
             test_role_arn=test_role_arn,
-            db_host=tf_output["postgres_address"]["value"],
-            db_port=tf_output["postgres_port"]["value"],
-            db_name=tf_output["postgres_database"]["value"],
-            db_user=tf_output["postgres_username"]["value"],
-            db_password=tf_output["postgres_password"]["value"],
+            db_host=postgres["address"]["value"],
+            db_port=postgres["port"]["value"],
+            db_name=postgres["database_name"]["value"],
+            db_user=postgres["master_username"]["value"],
+            db_password=postgres["master_password"]["value"],
         )
 
         # Test PostgreSQL monitoring integration
@@ -571,177 +462,126 @@ def test_module(
 
         # Check PMM version to understand API structure
         LOG.info("Checking PMM version...")
-        pmm_version = get_pmm_version(pmm_url)
-
-        # Get PostgreSQL connection details from outputs
-        postgres_address = tf_output["postgres_address"]["value"]
-        postgres_port = tf_output["postgres_port"]["value"]
-        postgres_database = tf_output["postgres_database"]["value"]
-        postgres_username = tf_output["postgres_username"]["value"]
-        postgres_password = tf_output["postgres_password"]["value"]
-
-        LOG.info("PostgreSQL instance: %s:%s", postgres_address, postgres_port)
+        get_pmm_version(pmm_url)
 
         # Prepare PMM API authentication
         auth_header = get_pmm_auth_header("admin", admin_password)
 
-        # Check Swagger UI is accessible
-        LOG.info("Checking PMM Swagger UI accessibility...")
-        swagger_response = requests.get(
-            f"{pmm_url}/swagger/",
-            auth=("admin", admin_password),
-            timeout=10,
-            allow_redirects=False,
-        )
-        LOG.info("Swagger UI status: %d", swagger_response.status_code)
-        if swagger_response.status_code in (200, 301, 302):
-            LOG.info("Swagger UI is available at %s/swagger/", pmm_url)
-
-        # Check if PostgreSQL is already monitored
-        LOG.info("Checking if PostgreSQL is already monitored in PMM...")
-        is_monitored = check_postgres_in_pmm(pmm_url, auth_header, postgres_address)
-
-        api_integration_successful = False
-
-        if is_monitored:
-            LOG.info("PostgreSQL instance is already being monitored by PMM")
-            api_integration_successful = True
+        # Add PostgreSQL to PMM monitoring
+        if not check_postgres_in_pmm(
+            pmm_url, auth_header, postgres["address"]["value"]
+        ):
+            LOG.info("Adding PostgreSQL to PMM...")
+            add_postgres_to_pmm(
+                pmm_url=pmm_url,
+                auth_header=auth_header,
+                postgres_address=postgres["address"]["value"],
+                postgres_port=postgres["port"]["value"],
+                postgres_database=postgres["database_name"]["value"],
+                postgres_username=postgres["master_username"]["value"],
+                postgres_password=postgres["master_password"]["value"],
+            )
         else:
-            LOG.info("PostgreSQL instance not found in PMM, attempting to add it...")
-            try:
-                add_postgres_to_pmm(
-                    pmm_url=pmm_url,
-                    auth_header=auth_header,
-                    postgres_address=postgres_address,
-                    postgres_port=postgres_port,
-                    postgres_database=postgres_database,
-                    postgres_username=postgres_username,
-                    postgres_password=postgres_password,
-                    service_name=f"test-postgres-{aws_region}",
-                )
-                LOG.info("PostgreSQL instance successfully added to PMM via API")
-
-                # Note: The QAN agent may show as "Waiting" if:
-                # 1. pg_stat_statements extension is not enabled
-                # 2. PostgreSQL user doesn't have rds_superuser role
-                # 3. Parameter group doesn't have shared_preload_libraries configured
-                LOG.info("")
-                LOG.info("Note: For full PMM monitoring, ensure PostgreSQL has:")
-                LOG.info("  - pg_stat_statements extension enabled")
-                LOG.info("  - User has rds_superuser role (for RDS)")
-                LOG.info(
-                    "  - Parameter group: shared_preload_libraries = 'pg_stat_statements'"
-                )
-                LOG.info("")
-
-                # Verify it's now in the list
-                time.sleep(5)
-                is_monitored = check_postgres_in_pmm(
-                    pmm_url, auth_header, postgres_address
-                )
-                if is_monitored:
-                    LOG.info("Verified: PostgreSQL is now being monitored by PMM")
-                    api_integration_successful = True
-                else:
-                    LOG.warning("PostgreSQL was added but not found in services list")
-            except Exception as e:
-                LOG.warning("Could not add PostgreSQL via API: %s", e)
-                LOG.warning("This may be due to PMM 3 API changes")
-
-        # List all services for verification
-        LOG.info("Listing all services in PMM...")
-        services = list_pmm_services(pmm_url, auth_header)
-        if services:
-            LOG.info("PMM Services (%d total):", len(services.get("services", [])))
-            for service in services.get("services", []):
-                LOG.info(
-                    "  - %s (%s) at %s",
-                    service.get("service_name"),
-                    service.get("service_type"),
-                    service.get("address", "N/A"),
-                )
-        else:
-            LOG.warning("Could not retrieve services list via API")
+            LOG.info("PostgreSQL already registered in PMM")
 
         LOG.info("=" * 80)
         LOG.info("PostgreSQL monitoring test completed")
         LOG.info("=" * 80)
 
-        # Test MySQL monitoring integration
-        LOG.info("=" * 80)
-        LOG.info("Testing MySQL monitoring integration")
-        LOG.info("=" * 80)
+        # Test Lambda ASG reconciler (registers MySQL instances in PMM)
+        reconciler_arn = tf_output.get("reconciler_lambda_function_arn", {}).get(
+            "value"
+        )
 
-        mysql_username = tf_output["mysql_username"]["value"]
-        mysql_password = tf_output["mysql_password"]["value"]
+        reconciler_successful = True
+        if reconciler_arn:
+            LOG.info("=" * 80)
+            LOG.info("Testing Lambda ASG reconciler")
+            LOG.info("=" * 80)
+            LOG.info("Lambda ARN: %s", reconciler_arn)
 
-        mysql_integration_successful = True
-        mysql_failed = []
+            lambda_client = boto3_session.client("lambda", region_name=aws_region)
 
-        # Build list of MySQL services to register:
-        # writer NLB endpoint + individual cluster nodes
-        mysql_services = []
-
-        writer_ep = percona_pmm["writer_endpoint"]
-        writer_host, writer_port = writer_ep.rsplit(":", 1)
-        mysql_services.append(("test-mysql-writer", writer_host, int(writer_port)))
-
-        for idx, ip in enumerate(percona_pmm["instance_ips"]):
-            mysql_services.append((f"test-mysql-node-{idx}", ip, 3306))
-
-        for svc_name, svc_host, svc_port in mysql_services:
-            if check_mysql_in_pmm(pmm_url, auth_header, svc_host):
-                LOG.info("%s already monitored, skipping", svc_name)
-                continue
-            LOG.info(
-                "Adding MySQL service: %s (%s:%d)",
-                svc_name,
-                svc_host,
-                svc_port,
+            # Invoke the reconciler Lambda synchronously
+            LOG.info("Invoking reconciler Lambda...")
+            invoke_response = lambda_client.invoke(
+                FunctionName=reconciler_arn,
+                InvocationType="RequestResponse",
+                Payload=json.dumps({"source": "pytest"}),
             )
-            try:
-                add_mysql_to_pmm(
-                    pmm_url=pmm_url,
-                    auth_header=auth_header,
-                    mysql_address=svc_host,
-                    mysql_port=svc_port,
-                    mysql_username=mysql_username,
-                    mysql_password=mysql_password,
-                    service_name=svc_name,
+
+            response_payload = json.loads(invoke_response["Payload"].read())
+            LOG.info(
+                "Lambda response: %s",
+                json.dumps(response_payload, indent=2),
+            )
+
+            if invoke_response.get("FunctionError"):
+                LOG.error(
+                    "Lambda invocation error: %s",
+                    response_payload,
                 )
-                LOG.info("Successfully added %s to PMM", svc_name)
-            except Exception as e:
-                LOG.warning("Could not add %s to PMM: %s", svc_name, e)
-                mysql_failed.append(svc_name)
+                reconciler_successful = False
+            else:
+                # Verify services were added
+                asg_name = percona_pmm["asg_name"]
+                expected_count = len(percona_pmm["instance_ips"])
 
-        if mysql_failed:
-            mysql_integration_successful = False
-            LOG.warning(
-                "Failed to add %d MySQL services: %s",
-                len(mysql_failed),
-                mysql_failed,
-            )
+                try:
+                    with timeout(seconds=30):
+                        while True:
+                            services = list_pmm_services(pmm_url, auth_header)
+                            reconciler_services = [
+                                s
+                                for s in (
+                                    services.get("services", []) if services else []
+                                )
+                                if s.get("service_name", "").startswith(f"{asg_name}/")
+                            ]
+                            if len(reconciler_services) >= expected_count:
+                                break
+                            time.sleep(2)
+                except TimeoutError:
+                    reconciler_successful = False
 
-        # List all services for verification
-        time.sleep(5)
-        LOG.info("Listing all services in PMM...")
-        services = list_pmm_services(pmm_url, auth_header)
-        if services:
-            LOG.info(
-                "PMM Services (%d total):",
-                len(services.get("services", [])),
-            )
-            for service in services.get("services", []):
                 LOG.info(
-                    "  - %s (%s) at %s",
-                    service.get("service_name"),
-                    service.get("service_type"),
-                    service.get("address", "N/A"),
+                    "Reconciler created %d services for ASG %s:",
+                    len(reconciler_services),
+                    asg_name,
                 )
+                for svc in reconciler_services:
+                    LOG.info(
+                        "  - %s at %s",
+                        svc.get("service_name"),
+                        svc.get("address"),
+                    )
 
-        LOG.info("=" * 80)
-        LOG.info("MySQL monitoring test completed")
-        LOG.info("=" * 80)
+                # Verify pmm-client is installed on each Percona instance
+                LOG.info("Verifying pmm-client installation on instances...")
+                asg_obj = ASG(
+                    asg_name,
+                    region=aws_region,
+                    role_arn=test_role_arn,
+                )
+                for inst in asg_obj.instances:
+                    exit_code, stdout, _ = inst.execute_command(
+                        "dpkg -l pmm-client | grep '^ii'",
+                        execution_timeout=30,
+                    )
+                    assert (
+                        exit_code == 0
+                    ), f"pmm-client not installed on {inst.instance_id}"
+                    LOG.info(
+                        "  pmm-client OK on %s: %s",
+                        inst.instance_id,
+                        stdout.strip(),
+                    )
+
+            LOG.info("=" * 80)
+            LOG.info("Lambda ASG reconciler test completed")
+            LOG.info("=" * 80)
+        else:
+            LOG.info("No reconciler Lambda deployed, skipping test")
 
         # Test AWS Backup functionality
         LOG.info("Testing AWS Backup...")
@@ -757,20 +597,8 @@ def test_module(
             backup_role_arn=backup_role_arn,
         )
 
-        failures = []
-        if api_integration_successful:
-            LOG.info("Status: PostgreSQL successfully added to PMM")
-        else:
-            LOG.error("FAILED: Could not add PostgreSQL instance to PMM")
-            failures.append("PostgreSQL")
-
-        if mysql_integration_successful:
-            LOG.info("Status: MySQL successfully added to PMM")
-        else:
-            LOG.error("FAILED: Could not add MySQL instance to PMM")
-            failures.append("MySQL")
-
-        if failures:
+        if reconciler_arn and not reconciler_successful:
+            LOG.error("FAILED: Lambda reconciler did not work correctly")
             LOG.info("")
             LOG.info("For manual verification/debugging:")
             LOG.info("  PMM URL: %s", pmm_url)
@@ -779,6 +607,6 @@ def test_module(
             LOG.info("")
 
             pytest.fail(
-                f"Failed to add {', '.join(failures)} to PMM "
-                f"monitoring. Check logs above for details."
+                "Lambda reconciler did not register MySQL instances in PMM. "
+                "Check logs above for details."
             )
