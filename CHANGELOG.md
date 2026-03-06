@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-06
+
+### Bug Fixes
+
+- Unique Percona test cluster_id and update TLS policy default
+- Add random suffix to resource names for concurrent deployment support
+
+### Features
+
+- Add MySQL/Percona Server monitoring support
+- Add Lambda ASG reconciler for automated Percona Server monitoring
+- Harden security, fix Lambda bugs, improve docs and coding standards
+
+### Refactor
+
+- Use aws_iam_policy_document for assume_role_policy
+
 ## [1.1.0] - 2025-12-15
 
 ### Bug Fixes
