@@ -281,7 +281,7 @@ GRANT pg_monitor TO pmm_user;
 
 ## Example: Complete Terraform Configuration
 
-See [examples/with-rds-monitoring](../examples/with-rds-monitoring/main.tf) for a complete example including:
+See [examples/with-rds-monitoring](https://github.com/infrahouse/terraform-aws-pmm-ecs/tree/main/examples/with-rds-monitoring) for a complete example including:
 - PMM deployment
 - RDS instance
 - Security group configuration
