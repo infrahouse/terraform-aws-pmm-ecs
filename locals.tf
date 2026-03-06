@@ -4,7 +4,7 @@ resource "random_id" "this" {
 
 locals {
   module         = "infrahouse/pmm-ecs/aws"
-  module_version = "1.1.0"
+  module_version = "1.2.0"
 
   service_name     = var.service_name
   service_name_uid = "${var.service_name}-${random_id.this.hex}"

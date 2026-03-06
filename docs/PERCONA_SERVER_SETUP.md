@@ -63,7 +63,7 @@ module "percona" {
 
 module "pmm" {
   source  = "registry.infrahouse.com/infrahouse/pmm-ecs/aws"
-  version = "1.1.0"
+  version = "1.2.0"
 
   providers = {
     aws     = aws
