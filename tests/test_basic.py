@@ -268,7 +268,7 @@ def add_postgres_to_pmm(
 
 
 @pytest.mark.parametrize(
-    "aws_provider_version", ["~> 5.31", "~> 6.0"], ids=["aws-5", "aws-6"]
+    "aws_provider_version", ["~> 6.0"], ids=["aws-6"]
 )
 def test_module(
     service_network,

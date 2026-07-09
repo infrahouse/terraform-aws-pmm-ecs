@@ -17,6 +17,10 @@ ExecStartPre=/usr/bin/docker pull ${docker_image}
 ExecStartPre=-/usr/bin/docker stop pmm-server
 ExecStartPre=-/usr/bin/docker rm pmm-server
 
+# Remove stale PostgreSQL lock file from persistent EBS volume
+# (left behind if the previous container was not shut down cleanly)
+ExecStartPre=-/bin/rm -f /srv/postgres14/postmaster.pid
+
 # Start PMM Server with persistent volume mounted from EBS
 # Single mount of /srv contains all PMM data subdirectories
 ExecStart=/usr/bin/docker run \
